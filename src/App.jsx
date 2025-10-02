@@ -28,6 +28,41 @@ import { supabase } from "./lib/supabase.js";
    로그인/회원가입 간단 패널
    =========================== */
 function AuthPanel() {
+
+  // === 승인 게이트: 프로필 로딩 ===
+const [profile, setProfile] = useState(null);
+const [profileReady, setProfileReady] = useState(false);
+
+useEffect(() => {
+  let ignore = false;
+  (async () => {
+    setProfileReady(false);
+    // 세션 없으면 그냥 통과(로그인 화면)
+    if (!session?.user) {
+      setProfile(null);
+      setProfileReady(true);
+      return;
+    }
+    // 내 프로필 읽기
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("approved,is_admin,full_name")
+      .eq("id", session.user.id)
+      .single();
+
+    if (ignore) return;
+    if (error) {
+      console.error("load profile error:", error);
+      setProfile(null);
+    } else {
+      setProfile(data || null);
+    }
+    setProfileReady(true);
+  })();
+
+  return () => { ignore = true; };
+}, [session?.user?.id]);
+
   const [mode, setMode] = useState("signin"); // 'signin' | 'signup'
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -408,6 +443,35 @@ export default function App() {
   if (!session) {
     return <AuthPanel />;
   }
+// 프로필 로딩 중이면 잠깐 대기
+if (session && !profileReady) {
+  return (
+    <div className="min-h-screen grid place-items-center text-gray-500">
+      프로필 확인 중...
+    </div>
+  );
+}
+
+// 승인되지 않았고, 관리자가 아니면 접근 차단 화면
+if (session && profileReady && !profile?.approved && !profile?.is_admin) {
+  return (
+    <div className="min-h-screen grid place-items-center bg-gray-50">
+      <div className="w-full max-w-sm rounded-2xl border bg-white p-6 shadow-sm text-center">
+        <h2 className="text-lg font-bold mb-2">승인 대기중</h2>
+        <p className="text-sm text-gray-600">
+          관리자가 승인할 때까지 이용할 수 없습니다.
+        </p>
+        <button
+          className="mt-4 px-4 py-2 rounded-xl border hover:bg-gray-50"
+          onClick={async () => { await supabase.auth.signOut(); }}
+        >
+          로그아웃
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
   // 프로필 로딩 중
   if (profileLoading) {
