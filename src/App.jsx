@@ -1,5 +1,4 @@
-// src/App.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import {
   LS,
@@ -25,105 +24,7 @@ import VatEstimatePage from "./pages/VatEstimatePage.jsx";
 import { supabase } from "./lib/supabase.js";
 
 /* ===========================
-   로그인/회원가입 간단 패널
-   =========================== */
-function AuthPanel() {
-  const [mode, setMode] = useState("signin"); // 'signin' | 'signup'
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const run = async () => {
-    setMsg("");
-    if (!email.trim() || !pw.trim()) {
-      setMsg("이메일/비밀번호를 입력해주세요.");
-      return;
-    }
-    setLoading(true);
-    try {
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: pw.trim(),
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password: pw.trim(),
-        });
-        if (error) throw error;
-        setMsg("회원가입 완료! 이제 로그인 해주세요.");
-        setMode("signin");
-      }
-    } catch (e) {
-      setMsg(e.message || "오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen grid place-items-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-2xl border bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-bold mb-3 text-center">Resell Manager</h1>
-        <div className="flex gap-2 mb-3">
-          <button
-            className={`flex-1 px-3 py-2 rounded-xl border ${
-              mode === "signin" ? "bg-indigo-50 border-indigo-400" : "hover:bg-gray-50"
-            }`}
-            onClick={() => setMode("signin")}
-          >
-            로그인
-          </button>
-          <button
-            className={`flex-1 px-3 py-2 rounded-xl border ${
-              mode === "signup" ? "bg-indigo-50 border-indigo-400" : "hover:bg-gray-50"
-            }`}
-            onClick={() => setMode("signup")}
-          >
-            회원가입
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          <input
-            type="email"
-            className="w-full border rounded-xl px-3 py-2"
-            placeholder="이메일"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            type="password"
-            className="w-full border rounded-xl px-3 py-2"
-            placeholder="비밀번호"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-          />
-          <button
-            onClick={run}
-            disabled={loading}
-            className={`w-full px-4 py-2 rounded-xl text-white ${
-              loading ? "bg-gray-400" : "bg-indigo-600 hover:bg-indigo-700"
-            }`}
-          >
-            {mode === "signin" ? "로그인" : "회원가입"}
-          </button>
-          {msg && <div className="text-sm text-center text-rose-600 mt-1">{msg}</div>}
-        </div>
-
-        <div className="text-xs text-gray-500 mt-4 leading-relaxed">
-          * 관리자 승인(approved=true) 후에만 본 서비스를 사용할 수 있습니다.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ===========================
-   승인 대기 게이트 화면
+   승인지연 안내
    =========================== */
 function ApprovalGate({ email, onRefresh, onLogout }) {
   return (
@@ -133,24 +34,373 @@ function ApprovalGate({ email, onRefresh, onLogout }) {
         <p className="text-sm text-gray-600">
           <b>{email}</b> 계정은 아직 관리자의 승인이 필요합니다.
           <br />
-          관리자에게 문의해 승인(approved)을 받으면 사용하실 수 있어요.
+          승인 후 이용하실 수 있어요.
         </p>
         <div className="mt-4 flex justify-center gap-2">
-          <button
-            onClick={onRefresh}
-            className="px-4 py-2 rounded-xl border hover:bg-gray-50"
-          >
-            새로고침
-          </button>
-          <button
-            onClick={onLogout}
-            className="px-4 py-2 rounded-xl bg-gray-900 text-white"
-          >
-            로그아웃
-          </button>
+          <button onClick={onRefresh} className="px-4 py-2 rounded-xl border hover:bg-gray-50">새로고침</button>
+          <button onClick={onLogout} className="px-4 py-2 rounded-xl bg-gray-900 text-white">로그아웃</button>
         </div>
-        <div className="text-xs text-gray-500 mt-3">
-          (관리자: Supabase Table Editor → <b>profiles</b>에서 해당 사용자 <b>approved</b>를 true로 변경)
+      </div>
+    </div>
+  );
+}
+
+/* ===========================
+   상단바 (바깥에 선언: 타입 안정)
+   =========================== */
+function Topbar({ sessionEmail, approved, onSignOut }) {
+  if (!sessionEmail) return null;
+  return (
+    <div className="col-span-2 flex items-center justify-between px-4 py-2 border-b bg-white/70 backdrop-blur-sm">
+      <div className="text-sm text-gray-600">
+        로그인: <span className="font-medium">{sessionEmail}</span>
+        {approved ? (
+          <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">승인됨</span>
+        ) : (
+          <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">승인대기</span>
+        )}
+      </div>
+      <button
+        className="px-3 py-1 rounded-lg border hover:bg-gray-50"
+        onClick={onSignOut}
+      >
+        로그아웃
+      </button>
+    </div>
+  );
+}
+
+/* ===========================
+   로그인/회원가입/찾기 패널
+   - 한 화면에 모두 유지(hidden 토글)
+   - 내부 컴포넌트 남발 금지
+   =========================== */
+function AuthPanel() {
+  // 모드: signin | signup | find_id | reset_pw
+  const [mode, setMode] = useState("signin");
+
+  // 공통
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // 로그인(아이디 전용)
+  const [usernameLogin, setUsernameLogin] = useState(
+    localStorage.getItem("res_last_username") || ""
+  );
+  const [pw, setPw] = useState("");
+  const [remember, setRemember] = useState(true);
+  useEffect(() => {
+    if (remember) localStorage.setItem("res_last_username", usernameLogin);
+    else localStorage.removeItem("res_last_username");
+  }, [usernameLogin, remember]);
+
+  // 회원가입
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+
+  // 아이디/비밀번호 찾기
+  const [findEmail, setFindEmail] = useState("");
+  const [resetId, setResetId] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+
+  // 포커스 복원용
+  const firstInputRef = useRef(null);
+  useEffect(() => {
+    setMsg("");
+    // 모드 전환 시 현재 보이는 폼의 첫 인풋으로 포커스
+    const t = setTimeout(() => firstInputRef.current?.focus?.(), 0);
+    return () => clearTimeout(t);
+  }, [mode]);
+
+  // --- RPC 도우미 ---
+  const findEmailByUsername = async (uname) => {
+    try {
+      const { data, error } = await supabase.rpc("get_email_by_username", {
+        p_username: uname.trim(),
+      });
+      if (error) throw error;
+      return data || "";
+    } catch {
+      return "";
+    }
+  };
+
+  // --- 액션들 ---
+  const doSignIn = async (e) => {
+    e?.preventDefault?.();
+    setMsg("");
+    const uname = usernameLogin.trim();
+    if (!uname || !pw.trim()) return setMsg("아이디와 비밀번호를 입력하세요.");
+    if (uname.includes("@")) return setMsg("이메일이 아닌 '아이디'를 입력하세요.");
+
+    setBusy(true);
+    try {
+      const emailToUse = await findEmailByUsername(uname);
+      if (!emailToUse) throw new Error("해당 아이디로 가입된 사용자가 없습니다.");
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailToUse,
+        password: pw,
+      });
+      if (error) throw error;
+    } catch (e2) {
+      setMsg(e2.message || "로그인 실패");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doSignUp = async (e) => {
+    e?.preventDefault?.();
+    setMsg("");
+    if (!username.trim()) return setMsg("아이디를 입력하세요.");
+    if (!email.trim()) return setMsg("이메일을 입력하세요.");
+    if (!pw1.trim() || !pw2.trim()) return setMsg("비밀번호를 입력하세요.");
+    if (pw1 !== pw2) return setMsg("비밀번호가 서로 다릅니다.");
+
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: pw1.trim(),
+      });
+      if (error) throw error;
+      const uid = data.user?.id;
+      if (uid) {
+        await supabase
+          .from("profiles")
+          .update({ username: username.trim(), email: email.trim() })
+          .eq("id", uid);
+      }
+      setMsg("회원가입 요청이 접수되었습니다. 관리자 승인 후 로그인 가능합니다.");
+      setMode("signin");
+    } catch (e2) {
+      setMsg(e2.message || "회원가입 실패");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doFindId = async (e) => {
+    e?.preventDefault?.();
+    setMsg("");
+    if (!findEmail.trim()) return setMsg("가입한 이메일을 입력하세요.");
+    try {
+      const { data, error } = await supabase.rpc("get_username_by_email", {
+        p_email: findEmail.trim(),
+      });
+      if (error) throw error;
+      if (!data) setMsg("해당 이메일로 가입된 아이디가 없습니다.");
+      else setMsg(`아이디: ${data}`);
+    } catch {
+      setMsg("아이디 찾기 기능이 준비되지 않았습니다. (관리자: RPC 생성 필요)");
+    }
+  };
+
+  const doResetPw = async (e) => {
+    e?.preventDefault?.();
+    setMsg("");
+    if (!resetId.trim() || !resetEmail.trim()) {
+      return setMsg("아이디와 이메일을 입력하세요.");
+    }
+    try {
+      const { data } = await supabase.rpc("get_email_by_username", {
+        p_username: resetId.trim(),
+      });
+      if (!data || data !== resetEmail.trim()) {
+        return setMsg("아이디/이메일이 일치하지 않습니다.");
+      }
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        resetEmail.trim(),
+        { redirectTo: window.location.origin + "/" }
+      );
+      if (error) throw error;
+      setMsg("재설정 링크를 이메일로 보냈습니다. 메일함을 확인하세요.");
+    } catch {
+      setMsg("비밀번호 찾기 기능이 준비되지 않았습니다. (관리자: RPC 생성 필요)");
+    }
+  };
+
+  // --- 카드 래퍼(고정) ---
+  return (
+    <div className="min-h-screen grid place-items-center bg-gradient-to-br from-indigo-50 to-white">
+      <div className="w-full max-w-md rounded-3xl border bg-white/80 backdrop-blur shadow-lg p-8">
+        <div className="text-center mb-2">
+          <div className="text-3xl font-extrabold">
+            <span className="bg-gradient-to-r from-indigo-600 to-purple-500 bg-clip-text text-transparent">
+              리셀러
+            </span>
+          </div>
+        </div>
+        <div className="text-center -mt-1 mb-6">
+          <div className="text-3xl font-extrabold">
+            <span className="bg-gradient-to-r from-indigo-600 to-purple-500 bg-clip-text text-transparent">
+              재고관리 프로그램
+            </span>
+          </div>
+        </div>
+
+        {/* 로그인 (항상 DOM에 존재, hidden 토글) */}
+        <form hidden={mode !== "signin"} className="space-y-3" onSubmit={doSignIn}>
+          <input
+            ref={firstInputRef}
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="아이디"
+            autoComplete="username"
+            value={usernameLogin}
+            onChange={(e) => setUsernameLogin(e.target.value)}
+          />
+          <input
+            type="password"
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="비밀번호"
+            autoComplete="current-password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+          />
+          <div className="flex items-center justify-between text-sm text-gray-600">
+            <label className="inline-flex items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+              />
+              로그인 정보 저장
+            </label>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setMode("find_id")} className="hover:underline">아이디 찾기</button>
+              <span className="text-gray-300">|</span>
+              <button type="button" onClick={() => setMode("reset_pw")} className="hover:underline">비밀번호 찾기</button>
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"}`}
+          >
+            로그인 →
+          </button>
+          {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
+          <div className="text-center text-sm text-gray-600">
+            계정이 없으신가요?{" "}
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signup")}>
+              회원가입
+            </button>
+          </div>
+        </form>
+
+        {/* 회원가입 */}
+        <form hidden={mode !== "signup"} className="space-y-3" onSubmit={doSignUp}>
+          <input
+            ref={firstInputRef}
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="아이디"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <input
+            type="email"
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="이메일"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            type="password"
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="비밀번호"
+            autoComplete="new-password"
+            value={pw1}
+            onChange={(e) => setPw1(e.target.value)}
+          />
+          <input
+            type="password"
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="비밀번호 확인"
+            autoComplete="new-password"
+            value={pw2}
+            onChange={(e) => setPw2(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-emerald-600 hover:-translate-y-0.5 hover:bg-emerald-700"}`}
+          >
+            회원가입 요청
+          </button>
+          {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
+          <div className="text-center text-sm text-gray-600">
+            이미 계정이 있으신가요?{" "}
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signin")}>
+              로그인
+            </button>
+          </div>
+        </form>
+
+        {/* 아이디 찾기 */}
+        <form hidden={mode !== "find_id"} className="space-y-3" onSubmit={doFindId}>
+          <input
+            ref={firstInputRef}
+            type="email"
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="가입한 이메일"
+            autoComplete="email"
+            value={findEmail}
+            onChange={(e) => setFindEmail(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"}`}
+          >
+            아이디 찾기
+          </button>
+          {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
+          <div className="text-center text-sm text-gray-600">
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signin")}>
+              로그인으로
+            </button>
+          </div>
+        </form>
+
+        {/* 비밀번호 찾기 */}
+        <form hidden={mode !== "reset_pw"} className="space-y-3" onSubmit={doResetPw}>
+          <input
+            ref={firstInputRef}
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="아이디"
+            autoComplete="username"
+            value={resetId}
+            onChange={(e) => setResetId(e.target.value)}
+          />
+          <input
+            type="email"
+            className="w-full border rounded-xl px-3 py-3"
+            placeholder="이메일"
+            autoComplete="email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"}`}
+          >
+            비밀번호 재설정 링크 보내기
+          </button>
+          {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
+          <div className="text-center text-sm text-gray-600">
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signin")}>
+              로그인으로
+            </button>
+          </div>
+        </form>
+
+        <div className="text-xs text-gray-500 mt-6 leading-relaxed">
+          * 관리자 승인(approved=true) 후에만 본 서비스를 사용할 수 있습니다.
         </div>
       </div>
     </div>
@@ -161,18 +411,16 @@ function ApprovalGate({ email, onRefresh, onLogout }) {
    메인 앱
    =========================== */
 export default function App() {
-  /* ---------- Auth 세션 ---------- */
+  // Auth 세션
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
-  // 세션 로드 + 구독
   useEffect(() => {
     let sub;
     (async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session ?? null);
       setAuthReady(true);
-
       sub = supabase.auth.onAuthStateChange((_event, newSession) => {
         setSession(newSession ?? null);
       }).data.subscription;
@@ -180,7 +428,7 @@ export default function App() {
     return () => sub && sub.unsubscribe();
   }, []);
 
-  /* ---------- 관리자 승인 체크: 프로필 로딩 ---------- */
+  // 관리자 승인 체크: 프로필
   const [profile, setProfile] = useState(null);
   const [profileReady, setProfileReady] = useState(false);
 
@@ -188,43 +436,31 @@ export default function App() {
     let ignore = false;
     (async () => {
       setProfileReady(false);
-
-      // 로그인 안됨 → 프로필 필요 없음
       if (!session?.user) {
         setProfile(null);
         setProfileReady(true);
         return;
       }
-
       const { data, error } = await supabase
         .from("profiles")
         .select("approved,is_admin,is_paid,username,full_name,avatar_url,email")
         .eq("id", session.user.id)
         .single();
-
       if (ignore) return;
-
-      if (error) {
-        console.error("load profile error:", error);
-        setProfile(null);
-      } else {
-        setProfile(data || null);
-      }
+      if (error) setProfile(null);
+      else setProfile(data || null);
       setProfileReady(true);
     })();
-
     return () => { ignore = true; };
   }, [session?.user?.id]);
 
-  // 세션 → 네임스페이스 적용 & 게스트 데이터 1회 마이그레이션
+  // 네임스페이스 적용 & 게스트 데이터 마이그레이션
   useEffect(() => {
     if (!session?.user) {
       setStorageNamespace("");
-      // 게스트 데이터 보여주도록 아래에서 상태 재로드
     } else {
       const ns = `user:${session.user.id}`;
       setStorageNamespace(ns);
-
       const flagKey = `res_migrated_${session.user.id}`;
       const already = localStorage.getItem(flagKey);
       if (!already) {
@@ -232,12 +468,11 @@ export default function App() {
         localStorage.setItem(flagKey, "1");
       }
     }
-    // 네임스페이스 변경 시 현재 공간에서 상태 재로드
     reloadAllStates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
-  /* ---------- 전역 상태들 ---------- */
+  // 전역 상태들
   const [products, setProducts] = useState(load(LS.PRODUCTS, []));
   const [lots, setLots] = useState(load(LS.LOTS, []));
   const [sales, setSales] = useState(load(LS.SALES, []));
@@ -248,7 +483,6 @@ export default function App() {
   const [brands, setBrands] = useState(load(LS.BRANDS, []));
   const [couriers, setCouriers] = useState(load(LS.COURIERS, []));
 
-  // 저장 동기화
   useEffect(() => save(LS.PRODUCTS, products), [products]);
   useEffect(() => save(LS.LOTS, lots), [lots]);
   useEffect(() => save(LS.SALES, sales), [sales]);
@@ -259,7 +493,6 @@ export default function App() {
   useEffect(() => save(LS.BRANDS, brands), [brands]);
   useEffect(() => save(LS.COURIERS, couriers), [couriers]);
 
-  // 한 방에 현재 네임스페이스에서 로드
   const reloadAllStates = () => {
     setProducts(load(LS.PRODUCTS, []));
     setLots(load(LS.LOTS, []));
@@ -272,13 +505,11 @@ export default function App() {
     setCouriers(load(LS.COURIERS, []));
   };
 
-  // 초기 탭은 ‘통합 장부’
+  // 초기 탭/재고 패널
   const [current, setCurrent] = useState("ledger");
-
-  // 재고 패널: 기본 접힘(false)
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // 품목 추가 + 초기 입고 기록 생성(선택)
+  // 품목 추가
   const addProduct = (
     code,
     name,
@@ -302,7 +533,6 @@ export default function App() {
       brand: brand || "",
       category: category || "",
     };
-
     const nextProducts = [...products, product];
     setProducts(nextProducts);
     save(LS.PRODUCTS, nextProducts);
@@ -315,11 +545,9 @@ export default function App() {
       const size = e?.size || "";
       if (qty > 0 && size) {
         const receivedAt = new Date().toISOString();
-        // lot seq
         const seqKey = "res_lot_seq_v1";
         const nextSeq = (Number(localStorage.getItem(seqKey)) || 0) + 1;
         localStorage.setItem(seqKey, String(nextSeq));
-
         const lot = {
           id: uid(),
           productId: product.id,
@@ -331,7 +559,6 @@ export default function App() {
           createdSeq: nextSeq,
         };
         newLots.push(lot);
-
         newIO.push({
           id: uid(),
           type: "입고",
@@ -360,73 +587,25 @@ export default function App() {
     }
   };
 
-  // 실시간 재고 집계
   const aggregated = useMemo(
     () => computeAggregated(products, lots),
     [products, lots]
   );
 
-  // 상단 사용자/로그아웃 바
-  const Topbar = () =>
-    !session?.user ? null : (
-      <div className="col-span-2 flex items-center justify-between px-4 py-2 border-b bg-white/70 backdrop-blur-sm">
-        <div className="text-sm text-gray-600">
-          로그인: <span className="font-medium">{session.user.email}</span>
-          {profile?.approved ? (
-            <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">
-              승인됨
-            </span>
-          ) : (
-            <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">
-              승인대기
-            </span>
-          )}
-        </div>
-        <button
-          className="px-3 py-1 rounded-lg border hover:bg-gray-50"
-          onClick={async () => {
-            await supabase.auth.signOut();
-            setStorageNamespace("");
-            reloadAllStates();
-          }}
-        >
-          로그아웃
-        </button>
-      </div>
-    );
-
   /* ---------- 렌더 ---------- */
+  if (!authReady)
+    return <div className="min-h-screen grid place-items-center text-gray-500">초기화 중...</div>;
 
-  // 아직 세션 확인 전이면 잠깐 대기
-  if (!authReady) {
-    return (
-      <div className="min-h-screen grid place-items-center text-gray-500">
-        초기화 중...
-      </div>
-    );
-  }
+  if (!session) return <AuthPanel />;
 
-  // 세션 없으면 로그인/회원가입 패널
-  if (!session) {
-    return <AuthPanel />;
-  }
+  if (!profileReady)
+    return <div className="min-h-screen grid place-items-center text-gray-500">프로필 확인 중...</div>;
 
-  // 프로필 로딩 중이면 잠깐 대기
-  if (!profileReady) {
-    return (
-      <div className="min-h-screen grid place-items-center text-gray-500">
-        프로필 확인 중...
-      </div>
-    );
-  }
-
-  // 승인되지 않았고, 관리자가 아니면 접근 차단 화면
   if (!profile?.approved && !profile?.is_admin) {
     return (
       <ApprovalGate
         email={session.user.email}
         onRefresh={async () => {
-          // 다시 불러오기
           const { data, error } = await supabase
             .from("profiles")
             .select("approved,is_admin,is_paid,username,full_name,avatar_url,email")
@@ -443,10 +622,17 @@ export default function App() {
     );
   }
 
-  // 로그인 + 승인 완료 → 본앱
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr]">
-      <Topbar />
+      <Topbar
+        sessionEmail={session.user.email}
+        approved={!!profile?.approved}
+        onSignOut={async () => {
+          await supabase.auth.signOut();
+          setStorageNamespace("");
+          reloadAllStates();
+        }}
+      />
       <div className="grid grid-cols-[260px_1fr]">
         <Sidebar current={current} setCurrent={setCurrent} />
 
@@ -456,13 +642,11 @@ export default function App() {
               <PartnersPage partners={partners} setPartners={setPartners} />
             </div>
           )}
-
           {current === "payments" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <PaymentsPage payments={payments} setPayments={setPayments} />
             </div>
           )}
-
           {current === "categories" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <CategoriesPage
@@ -473,13 +657,11 @@ export default function App() {
               />
             </div>
           )}
-
           {current === "courier" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <CouriersPage couriers={couriers} setCouriers={setCouriers} />
             </div>
           )}
-
           {current === "products" && (
             <ProductsPage
               products={products}
@@ -491,7 +673,6 @@ export default function App() {
               categories={categoriesState}
             />
           )}
-
           {current === "io-register" && (
             <InOutRegister
               products={products}
@@ -506,7 +687,6 @@ export default function App() {
               couriers={couriers}
             />
           )}
-
           {current === "returns" && (
             <ReturnsExchangePage
               products={products}
@@ -518,7 +698,6 @@ export default function App() {
               setIoRec={setIoRec}
             />
           )}
-
           {current === "io-history" && (
             <IoHistoryPage
               products={products}
@@ -529,7 +708,6 @@ export default function App() {
               categories={categoriesState}
             />
           )}
-
           {current === "ledger" && (
             <LedgerPage
               products={products}
@@ -540,7 +718,6 @@ export default function App() {
               ioRec={ioRec}
             />
           )}
-
           {current === "stats" && (
             <VatEstimatePage
               products={products}
@@ -551,7 +728,6 @@ export default function App() {
               ioRec={ioRec}
             />
           )}
-
           {current === "out-later-list" && (
             <OutLaterListPage
               partners={partners}
@@ -561,7 +737,6 @@ export default function App() {
           )}
         </main>
 
-        {/* 우측 실시간 재고 패널 (기본 접힘) */}
         <InventoryDrawer
           open={drawerOpen}
           setOpen={setDrawerOpen}
