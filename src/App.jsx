@@ -28,41 +28,6 @@ import { supabase } from "./lib/supabase.js";
    로그인/회원가입 간단 패널
    =========================== */
 function AuthPanel() {
-
-  // === 승인 게이트: 프로필 로딩 ===
-const [profile, setProfile] = useState(null);
-const [profileReady, setProfileReady] = useState(false);
-
-useEffect(() => {
-  let ignore = false;
-  (async () => {
-    setProfileReady(false);
-    // 세션 없으면 그냥 통과(로그인 화면)
-    if (!session?.user) {
-      setProfile(null);
-      setProfileReady(true);
-      return;
-    }
-    // 내 프로필 읽기
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("approved,is_admin,full_name")
-      .eq("id", session.user.id)
-      .single();
-
-    if (ignore) return;
-    if (error) {
-      console.error("load profile error:", error);
-      setProfile(null);
-    } else {
-      setProfile(data || null);
-    }
-    setProfileReady(true);
-  })();
-
-  return () => { ignore = true; };
-}, [session?.user?.id]);
-
   const [mode, setMode] = useState("signin"); // 'signin' | 'signup'
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -215,38 +180,40 @@ export default function App() {
     return () => sub && sub.unsubscribe();
   }, []);
 
-  /* ---------- 3단계: 관리자 승인 체크용 프로필 로딩 ---------- */
+  /* ---------- 관리자 승인 체크: 프로필 로딩 ---------- */
   const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileErr, setProfileErr] = useState("");
-
-  const fetchProfile = async (uid) => {
-    if (!uid) {
-      setProfile(null);
-      setProfileLoading(false);
-      setProfileErr("");
-      return;
-    }
-    setProfileLoading(true);
-    setProfileErr("");
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("approved,is_admin,is_paid,username,full_name,avatar_url,email")
-      .eq("id", uid)
-      .single();
-
-    if (error) {
-      setProfile(null);
-      setProfileErr(error.message || "프로필을 불러오지 못했습니다.");
-    } else {
-      setProfile(data || null);
-    }
-    setProfileLoading(false);
-  };
+  const [profileReady, setProfileReady] = useState(false);
 
   useEffect(() => {
-    fetchProfile(session?.user?.id || null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let ignore = false;
+    (async () => {
+      setProfileReady(false);
+
+      // 로그인 안됨 → 프로필 필요 없음
+      if (!session?.user) {
+        setProfile(null);
+        setProfileReady(true);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("approved,is_admin,is_paid,username,full_name,avatar_url,email")
+        .eq("id", session.user.id)
+        .single();
+
+      if (ignore) return;
+
+      if (error) {
+        console.error("load profile error:", error);
+        setProfile(null);
+      } else {
+        setProfile(data || null);
+      }
+      setProfileReady(true);
+    })();
+
+    return () => { ignore = true; };
   }, [session?.user?.id]);
 
   // 세션 → 네임스페이스 적용 & 게스트 데이터 1회 마이그레이션
@@ -443,66 +410,30 @@ export default function App() {
   if (!session) {
     return <AuthPanel />;
   }
-// 프로필 로딩 중이면 잠깐 대기
-if (session && !profileReady) {
-  return (
-    <div className="min-h-screen grid place-items-center text-gray-500">
-      프로필 확인 중...
-    </div>
-  );
-}
 
-// 승인되지 않았고, 관리자가 아니면 접근 차단 화면
-if (session && profileReady && !profile?.approved && !profile?.is_admin) {
-  return (
-    <div className="min-h-screen grid place-items-center bg-gray-50">
-      <div className="w-full max-w-sm rounded-2xl border bg-white p-6 shadow-sm text-center">
-        <h2 className="text-lg font-bold mb-2">승인 대기중</h2>
-        <p className="text-sm text-gray-600">
-          관리자가 승인할 때까지 이용할 수 없습니다.
-        </p>
-        <button
-          className="mt-4 px-4 py-2 rounded-xl border hover:bg-gray-50"
-          onClick={async () => { await supabase.auth.signOut(); }}
-        >
-          로그아웃
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
-  // 프로필 로딩 중
-  if (profileLoading) {
+  // 프로필 로딩 중이면 잠깐 대기
+  if (!profileReady) {
     return (
       <div className="min-h-screen grid place-items-center text-gray-500">
-        프로필 불러오는 중...
+        프로필 확인 중...
       </div>
     );
   }
 
-  // 프로필 에러(가입 직후 잠깐 생길 수 있음)
-  if (!profile && profileErr) {
+  // 승인되지 않았고, 관리자가 아니면 접근 차단 화면
+  if (!profile?.approved && !profile?.is_admin) {
     return (
       <ApprovalGate
         email={session.user.email}
-        onRefresh={() => fetchProfile(session.user.id)}
-        onLogout={async () => {
-          await supabase.auth.signOut();
-          setStorageNamespace("");
-          reloadAllStates();
+        onRefresh={async () => {
+          // 다시 불러오기
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("approved,is_admin,is_paid,username,full_name,avatar_url,email")
+            .eq("id", session.user.id)
+            .single();
+          if (!error) setProfile(data || null);
         }}
-      />
-    );
-  }
-
-  // 승인 대기 게이트
-  if (!profile?.approved) {
-    return (
-      <ApprovalGate
-        email={session.user.email}
-        onRefresh={() => fetchProfile(session.user.id)}
         onLogout={async () => {
           await supabase.auth.signOut();
           setStorageNamespace("");
