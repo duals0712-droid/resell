@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 옵션: 시스템 폰트로 깔끔하게 */
+:root { color-scheme: light; }
+body { @apply bg-gray-100 text-gray-900; }
