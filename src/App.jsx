@@ -54,7 +54,7 @@ function AuthPanel() {
           password: pw.trim(),
         });
         if (error) throw error;
-        setMsg("회원가입 완료! 이메일 확인이 필요할 수 있어요. 이제 로그인 해주세요.");
+        setMsg("회원가입 완료! 이제 로그인 해주세요.");
         setMode("signin");
       }
     } catch (e) {
@@ -115,8 +115,42 @@ function AuthPanel() {
         </div>
 
         <div className="text-xs text-gray-500 mt-4 leading-relaxed">
-          * 회원가입은 기본적으로 비활성 사용자로 시작할 수 있고(관리자 승인 필요 시),
-          로그인 정책은 추후 관리자 페이지에서 확장 가능합니다.
+          * 관리자 승인(approved=true) 후에만 본 서비스를 사용할 수 있습니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===========================
+   승인 대기 게이트 화면
+   =========================== */
+function ApprovalGate({ email, onRefresh, onLogout }) {
+  return (
+    <div className="min-h-screen grid place-items-center bg-gray-50">
+      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm text-center">
+        <h2 className="text-xl font-bold mb-2">승인 대기</h2>
+        <p className="text-sm text-gray-600">
+          <b>{email}</b> 계정은 아직 관리자의 승인이 필요합니다.
+          <br />
+          관리자에게 문의해 승인(approved)을 받으면 사용하실 수 있어요.
+        </p>
+        <div className="mt-4 flex justify-center gap-2">
+          <button
+            onClick={onRefresh}
+            className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+          >
+            새로고침
+          </button>
+          <button
+            onClick={onLogout}
+            className="px-4 py-2 rounded-xl bg-gray-900 text-white"
+          >
+            로그아웃
+          </button>
+        </div>
+        <div className="text-xs text-gray-500 mt-3">
+          (관리자: Supabase Table Editor → <b>profiles</b>에서 해당 사용자 <b>approved</b>를 true로 변경)
         </div>
       </div>
     </div>
@@ -146,9 +180,42 @@ export default function App() {
     return () => sub && sub.unsubscribe();
   }, []);
 
+  /* ---------- 3단계: 관리자 승인 체크용 프로필 로딩 ---------- */
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileErr, setProfileErr] = useState("");
+
+  const fetchProfile = async (uid) => {
+    if (!uid) {
+      setProfile(null);
+      setProfileLoading(false);
+      setProfileErr("");
+      return;
+    }
+    setProfileLoading(true);
+    setProfileErr("");
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("approved,is_admin,is_paid,username,full_name,avatar_url,email")
+      .eq("id", uid)
+      .single();
+
+    if (error) {
+      setProfile(null);
+      setProfileErr(error.message || "프로필을 불러오지 못했습니다.");
+    } else {
+      setProfile(data || null);
+    }
+    setProfileLoading(false);
+  };
+
+  useEffect(() => {
+    fetchProfile(session?.user?.id || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
   // 세션 → 네임스페이스 적용 & 게스트 데이터 1회 마이그레이션
   useEffect(() => {
-    // 세션 없으면 게스트 모드
     if (!session?.user) {
       setStorageNamespace("");
       // 게스트 데이터 보여주도록 아래에서 상태 재로드
@@ -159,12 +226,11 @@ export default function App() {
       const flagKey = `res_migrated_${session.user.id}`;
       const already = localStorage.getItem(flagKey);
       if (!already) {
-        // 덮어쓰지 않음(overwrite:false) → 대상에 있으면 그대로 둠
         migrateLocalDataToNamespace(ns, Object.values(LS), { overwrite: false });
         localStorage.setItem(flagKey, "1");
       }
     }
-    // 세션/네임스페이스가 바뀔 때마다 현재 공간에서 상태 재로드
+    // 네임스페이스 변경 시 현재 공간에서 상태 재로드
     reloadAllStates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
@@ -191,7 +257,7 @@ export default function App() {
   useEffect(() => save(LS.BRANDS, brands), [brands]);
   useEffect(() => save(LS.COURIERS, couriers), [couriers]);
 
-  // 한 방에 현재 네임스페이스에서 로드하도록 함
+  // 한 방에 현재 네임스페이스에서 로드
   const reloadAllStates = () => {
     setProducts(load(LS.PRODUCTS, []));
     setLots(load(LS.LOTS, []));
@@ -304,6 +370,15 @@ export default function App() {
       <div className="col-span-2 flex items-center justify-between px-4 py-2 border-b bg-white/70 backdrop-blur-sm">
         <div className="text-sm text-gray-600">
           로그인: <span className="font-medium">{session.user.email}</span>
+          {profile?.approved ? (
+            <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">
+              승인됨
+            </span>
+          ) : (
+            <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">
+              승인대기
+            </span>
+          )}
         </div>
         <button
           className="px-3 py-1 rounded-lg border hover:bg-gray-50"
@@ -334,7 +409,46 @@ export default function App() {
     return <AuthPanel />;
   }
 
-  // 로그인 상태면 본앱
+  // 프로필 로딩 중
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen grid place-items-center text-gray-500">
+        프로필 불러오는 중...
+      </div>
+    );
+  }
+
+  // 프로필 에러(가입 직후 잠깐 생길 수 있음)
+  if (!profile && profileErr) {
+    return (
+      <ApprovalGate
+        email={session.user.email}
+        onRefresh={() => fetchProfile(session.user.id)}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          setStorageNamespace("");
+          reloadAllStates();
+        }}
+      />
+    );
+  }
+
+  // 승인 대기 게이트
+  if (!profile?.approved) {
+    return (
+      <ApprovalGate
+        email={session.user.email}
+        onRefresh={() => fetchProfile(session.user.id)}
+        onLogout={async () => {
+          await supabase.auth.signOut();
+          setStorageNamespace("");
+          reloadAllStates();
+        }}
+      />
+    );
+  }
+
+  // 로그인 + 승인 완료 → 본앱
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr]">
       <Topbar />
