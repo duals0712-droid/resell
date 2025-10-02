@@ -95,6 +95,7 @@ function AuthPanel() {
   }, [usernameLogin, remember]);
 
   // 회원가입
+    // 회원가입
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [pw1, setPw1] = useState("");
