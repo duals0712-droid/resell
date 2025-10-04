@@ -3,14 +3,11 @@ import { supabase } from "./supabase.js";
 
 const TABLE = "user_state_v1";
 
-// 최신성 비교용 타임스탬프(클라이언트가 마지막으로 적용한 서버 updated_at))
+// 클라이언트가 마지막으로 적용한 서버 updated_at
 let lastAppliedAt = 0;
 
-// ===== 1) 초기 로드 (비파괴) =====
-// - 있으면 그대로 가져옴
-// - 없으면 initialSnapshot으로 1행 생성
+// 1) 초기 로드(비파괴)
 export async function initUserState(userId, initialSnapshot = {}) {
-  // 1) 먼저 조회
   const { data: existed, error: selErr } = await supabase
     .from(TABLE)
     .select("*")
@@ -23,7 +20,6 @@ export async function initUserState(userId, initialSnapshot = {}) {
     return existed;
   }
 
-  // 2) 없으면 생성(최초 1회)
   const row = {
     user_id: userId,
     products: initialSnapshot.products ?? [],
@@ -35,9 +31,8 @@ export async function initUserState(userId, initialSnapshot = {}) {
     categories: initialSnapshot.categories ?? [],
     brands: initialSnapshot.brands ?? [],
     couriers: initialSnapshot.couriers ?? [],
-    out_later: initialSnapshot.out_later ?? [], // ✅ 우선출고
+    out_later: initialSnapshot.out_later ?? [],
     lot_seq: Number(initialSnapshot.lot_seq ?? 0),
-    // 서버 트리거가 없더라도 안전하게 클라에서 찍어둠(있으면 서버 now()로 덮임)
     updated_at: new Date().toISOString(),
   };
 
@@ -47,7 +42,6 @@ export async function initUserState(userId, initialSnapshot = {}) {
     .select()
     .single();
 
-  // 동시 경합(23505)이면 다시 조회
   if (insErr && String(insErr.code) === "23505") {
     const { data } = await supabase.from(TABLE).select("*").eq("user_id", userId).single();
     const ts = data?.updated_at ? Date.parse(data.updated_at) : Date.now();
@@ -61,7 +55,7 @@ export async function initUserState(userId, initialSnapshot = {}) {
   return inserted;
 }
 
-// ===== 2) 부분 저장(디바운스 업서트) =====
+// 2) 부분 저장(디바운스 업서트)
 let debounceTimer = null;
 let pending = {};
 
@@ -73,7 +67,6 @@ export function queueSavePartial(userId, partial) {
     const payload = {
       user_id: userId,
       ...pending,
-      // 서버 트리거가 없어도 안전하게 찍음(있으면 서버 now()가 우선)
       updated_at: new Date().toISOString(),
     };
     pending = {};
@@ -94,13 +87,12 @@ export function queueSavePartial(userId, partial) {
   }, 300);
 }
 
-// ===== 3) 실시간 구독 (updated_at 최신성 가드) =====
+// 3) 실시간 구독(updated_at 가드)
 export function subscribeUserState(userId, onChange) {
   const onlyIfNewer = (row) => {
     if (!row) return;
     const ts = row.updated_at ? Date.parse(row.updated_at) : 0;
     if (!ts) return;
-    // 과거/동일 스냅샷이면 무시
     if (lastAppliedAt && ts <= lastAppliedAt) return;
     lastAppliedAt = ts;
     onChange(row);
