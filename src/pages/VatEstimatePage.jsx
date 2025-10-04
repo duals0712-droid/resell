@@ -1,7 +1,5 @@
 // src/pages/VatEstimatePage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { LS, load } from "../lib/storage.js";
-
 /* ===== 공통 유틸 ===== */
 const fmt = (n = 0) => (Number(n) || 0).toLocaleString();
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
@@ -27,11 +25,11 @@ export default function VatEstimatePage({
   ioRec: ioRecProp,
 }) {
   // 원천 데이터 (App에서 주는 값 우선, 없으면 로컬 로드)
-  const products = productsProp ?? load(LS.PRODUCTS, []);
-  const partners = partnersProp ?? load(LS.PARTNERS, []);
-  const payments = paymentsProp ?? load(LS.PAYMENTS, []);
-  const sales = salesProp ?? load(LS.SALES, []);
-  const ioRec = ioRecProp ?? load(LS.IOREC, []);
+  const products = productsProp ?? [];
+  const partners = partnersProp ?? [];
+  const payments = paymentsProp ?? [];
+  const sales = salesProp ?? [];
+  const ioRec = ioRecProp ?? [];
   const manual = load(MANUAL_KEY, []);
 
   // 연도/반기 기본값: 현재 날짜 기준

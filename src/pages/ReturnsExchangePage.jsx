@@ -1,6 +1,5 @@
 // src/pages/ReturnsExchangePage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { LS, load, save } from "../lib/storage.js";
 import { uid } from "../lib/uid.js";
 
 /* ===== 공통 유틸 ===== */
@@ -33,11 +32,9 @@ const daysBetween = (fromYmd, toYmd) => {
 };
 
 // LOT 생성 시퀀스(다른 곳과 동일 키 유지)
-function nextLotSeq() {
-  const KEY = "res_lot_seq_v1";
-  const n = (Number(localStorage.getItem(KEY)) || 0) + 1;
-  localStorage.setItem(KEY, String(n));
-  return n;
+function nextLotSeq(lotsArr = []) {
+  const maxSeq = Math.max(0, ...[0, ...lotsArr.map(l => Number(l?.createdSeq) || 0)]);
+  return maxSeq + 1;
 }
 
 /* ===== 상단 토스트 (OutLater 스타일) ===== */
@@ -108,17 +105,17 @@ function Modal({ open, onClose, children }) {
 
 /* ===== 메인 페이지 ===== */
 export default function ReturnsExchangePage({
-  products = load(LS.PRODUCTS, []),
-  partners = load(LS.PARTNERS, []),
-  payments = load(LS.PAYMENTS, []),
+  products = [],
+  partners = [],
+  payments = [],
   lots: lotsProp, // App에서 넘기면 사용
   setLots: setLotsProp,
   ioRec: ioRecProp,
   setIoRec: setIoRecProp,
 }) {
   // lots/ioRec 원천
-  const [lots, setLots] = useState(lotsProp ?? load(LS.LOTS, []));
-  const [ioRec, setIoRec] = useState(ioRecProp ?? load(LS.IOREC, []));
+  const [lots, setLots] = useState(lotsProp ?? []);
+  const [ioRec, setIoRec] = useState(ioRecProp ?? []);
 
   // 토스트 상태
   const [toast, setToast] = useState({ open: false, type: "success", message: "" });
@@ -136,12 +133,10 @@ export default function ReturnsExchangePage({
   // 변경 저장 래퍼
   const commitLots = (next) => {
     setLots(next);
-    save(LS.LOTS, next);
     if (setLotsProp) setLotsProp(next);
   };
   const commitIo = (next) => {
     setIoRec(next);
-    save(LS.IOREC, next);
     if (setIoRecProp) setIoRecProp(next);
   };
 
@@ -390,7 +385,7 @@ export default function ReturnsExchangePage({
       receivedAt: src.receivedAt,                // 원 매입일 승계
       receivedYmd: src.receivedYmd ?? undefined, // 사용 중이면 유지
       createdAt: new Date().toISOString(),
-      createdSeq: nextLotSeq(),
+      createdSeq: nextLotSeq(lots),
     };
     nextLots.push(newLot);
 

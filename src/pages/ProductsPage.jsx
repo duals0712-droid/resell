@@ -1,7 +1,5 @@
 // src/pages/ProductsPage.jsx
 import React from "react";
-import { LS, save } from "../lib/storage.js";
-
 /* ====== 상단 토스트 (OutLaterListPage와 동일 스타일) ====== */
 function Toast({ open, type = "success", message = "" }) {
   const color =
@@ -486,7 +484,6 @@ export default function ProductsPage({
   const onUpdate = (patch) => {
     const next = products.map((p) => (p.id === patch.id ? { ...p, ...patch } : p));
     setProducts(next);
-    save(LS.PRODUCTS, next);
     setEditTarget(null);
     showToast("success", "저장되었습니다.");
   };
@@ -496,9 +493,7 @@ export default function ProductsPage({
     const np = products.filter((p) => p.id !== productId);
     const nl = lots.filter((l) => l.productId !== productId);
     setProducts(np);
-    save(LS.PRODUCTS, np);
     setLots(nl);
-    save(LS.LOTS, nl);
     setSelectedMap((m) => {
       const mm = { ...m };
       delete mm[productId];
@@ -517,9 +512,7 @@ export default function ProductsPage({
     const np = products.filter((p) => !ids.includes(p.id));
     const nl = lots.filter((l) => !ids.includes(l.productId));
     setProducts(np);
-    save(LS.PRODUCTS, np);
     setLots(nl);
-    save(LS.LOTS, nl);
     setSelectedMap({});
     showToast("success", "삭제되었습니다.");
   };

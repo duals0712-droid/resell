@@ -2,31 +2,28 @@
 import { supabase } from "./supabase.js";
 
 const TABLE = "user_state_v1";
-let lastServerUpdatedAt = null;
 
-// ---- 초기 로드 ----
+// 최신성 비교용 타임스탬프(클라이언트가 마지막으로 적용한 서버 updated_at)
+let lastAppliedAt = 0;
+
+// ===== 1) 초기 로드 (비파괴) =====
+// - 있으면 그대로 가져옴
+// - 없으면 initialSnapshot으로 1행 생성
 export async function initUserState(userId, initialSnapshot = {}) {
-  let existing = null;
-  try {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-    if (error) {
-      if (String(error.code) !== "PGRST116") throw error; // row not found 이외 에러면 throw
-    } else {
-      existing = data || null;
-    }
-  } catch (e) {
-    throw e;
+  // 1) 먼저 조회
+  const { data: existed, error: selErr } = await supabase
+    .from(TABLE)
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (existed && !selErr) {
+    const ts = existed.updated_at ? Date.parse(existed.updated_at) : Date.now();
+    if (!Number.isNaN(ts)) lastAppliedAt = ts;
+    return existed;
   }
 
-  if (existing) {
-    lastServerUpdatedAt = existing.updated_at || null;
-    return existing;
-  }
-
+  // 2) 없으면 생성(최초 1회)
   const row = {
     user_id: userId,
     products: initialSnapshot.products ?? [],
@@ -38,7 +35,8 @@ export async function initUserState(userId, initialSnapshot = {}) {
     categories: initialSnapshot.categories ?? [],
     brands: initialSnapshot.brands ?? [],
     couriers: initialSnapshot.couriers ?? [],
-    lot_seq: initialSnapshot.lot_seq ?? 0,
+    lot_seq: Number(initialSnapshot.lot_seq ?? 0),
+    // 서버 트리거가 없더라도 안전하게 클라에서 찍어둠(있으면 서버 now()로 덮임)
     updated_at: new Date().toISOString(),
   };
 
@@ -48,16 +46,21 @@ export async function initUserState(userId, initialSnapshot = {}) {
     .select()
     .single();
 
-  if (insErr) {
-    console.error("initUserState: insert error", insErr);
-    throw insErr;
+  // 동시 경합(23505)이면 다시 조회
+  if (insErr && String(insErr.code) === "23505") {
+    const { data } = await supabase.from(TABLE).select("*").eq("user_id", userId).single();
+    const ts = data?.updated_at ? Date.parse(data.updated_at) : Date.now();
+    if (!Number.isNaN(ts)) lastAppliedAt = ts;
+    return data;
   }
+  if (insErr) throw insErr;
 
-  lastServerUpdatedAt = inserted.updated_at || null;
+  const ts = inserted?.updated_at ? Date.parse(inserted.updated_at) : Date.now();
+  if (!Number.isNaN(ts)) lastAppliedAt = ts;
   return inserted;
 }
 
-// ---- 저장(업서트) + 최신성 기록 ----
+// ===== 2) 부분 저장(디바운스 업서트) =====
 let debounceTimer = null;
 let pending = {};
 
@@ -66,32 +69,39 @@ export function queueSavePartial(userId, partial) {
   if (debounceTimer) clearTimeout(debounceTimer);
 
   debounceTimer = setTimeout(async () => {
-    const payload = { user_id: userId, ...pending, updated_at: new Date().toISOString() };
+    const payload = {
+      user_id: userId,
+      ...pending,
+      // 서버 트리거가 없어도 안전하게 찍음(있으면 서버 now()가 우선)
+      updated_at: new Date().toISOString(),
+    };
     pending = {};
+
     try {
       const { data, error } = await supabase
         .from(TABLE)
         .upsert(payload, { onConflict: "user_id" })
         .select("updated_at")
         .single();
+
       if (error) throw error;
-      if (data?.updated_at) {
-        lastServerUpdatedAt = data.updated_at;
-      }
+      const ts = data?.updated_at ? Date.parse(data.updated_at) : Date.now();
+      if (!Number.isNaN(ts)) lastAppliedAt = ts;
     } catch (e) {
       console.error("queueSavePartial upsert error", e);
     }
   }, 300);
 }
 
-// ---- 실시간 구독: 더 '새로운' 것만 반영 ----
+// ===== 3) 실시간 구독 (updated_at 최신성 가드) =====
 export function subscribeUserState(userId, onChange) {
   const onlyIfNewer = (row) => {
     if (!row) return;
-    const rAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-    const lAt = lastServerUpdatedAt ? new Date(lastServerUpdatedAt).getTime() : 0;
-    if (rAt <= lAt) return; // 과거/동일 타임스탬프는 무시
-    lastServerUpdatedAt = row.updated_at;
+    const ts = row.updated_at ? Date.parse(row.updated_at) : 0;
+    if (!ts) return;
+    // 과거/동일 스냅샷이면 무시
+    if (lastAppliedAt && ts <= lastAppliedAt) return;
+    lastAppliedAt = ts;
     onChange(row);
   };
 
@@ -110,6 +120,8 @@ export function subscribeUserState(userId, onChange) {
     .subscribe();
 
   return () => {
-    try { supabase.removeChannel(channel); } catch {}
+    try {
+      supabase.removeChannel(channel);
+    } catch {}
   };
 }

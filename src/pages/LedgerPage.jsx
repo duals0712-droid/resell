@@ -1,7 +1,5 @@
 // src/pages/LedgerPage.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { LS, load, save } from "../lib/storage.js";
-
 /* ========================= 유틸 ========================= */
 const fmt = (n = 0) => (Number(n) || 0).toLocaleString();
 const onlyDigits = (s = "") => (s + "").replace(/[^\d]/g, "");
@@ -318,12 +316,12 @@ export default function LedgerPage({
   ioRec: ioRecProp, // 장부 표시 보조 용도(영구 로그)
 }) {
   // 원천 데이터
-  const products = productsProp ?? load(LS.PRODUCTS, []);
-  const partners = partnersProp ?? load(LS.PARTNERS, []);
-  const payments = paymentsProp ?? load(LS.PAYMENTS, []);
-  const lots = lotsProp ?? load(LS.LOTS, []); // (참조만; 매입행 생성에는 더이상 사용 X)
-  const sales = salesProp ?? load(LS.SALES, []);
-  const ioRec = ioRecProp ?? load(LS.IOREC, []); // ✅ 입고/출고/반품/교환 영구 로그
+  const products = productsProp ?? [];
+  const partners = partnersProp ?? [];
+  const payments = paymentsProp ?? [];
+  const lots = lotsProp ?? []; // (참조만; 매입행 생성에는 더이상 사용 X)
+  const sales = salesProp ?? [];
+  const ioRec = ioRecProp ?? []; // ✅ 입고/출고/반품/교환 영구 로그
 
   // 토스트
   const [toast, setToast] = useState({ open: false, type: "success", message: "" });

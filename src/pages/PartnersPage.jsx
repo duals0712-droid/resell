@@ -1,6 +1,5 @@
 // src/pages/PartnersPage.jsx
 import React from "react";
-import { LS, save } from "../lib/storage.js";
 import { uid } from "../lib/uid.js";
 
 /* ====== 유틸 ====== */
@@ -804,14 +803,12 @@ export default function PartnersPage({ partners, setPartners }) {
     if (!confirm("이 거래처를 삭제할까요?")) return;
     const next = partners.filter((p) => p.id !== id);
     setPartners(next);
-    save(LS.PARTNERS, next);
     showToast("success", "삭제되었습니다.");
   };
 
   const onCreate = (data) => {
     const next = [...partners, { id: uid(), ...data }];
     setPartners(next);
-    save(LS.PARTNERS, next);
     setShowAddModal(false);
     showToast("success", "저장되었습니다.");
   };
@@ -819,7 +816,6 @@ export default function PartnersPage({ partners, setPartners }) {
   const onUpdate = (id, data) => {
     const next = partners.map((p) => (p.id === id ? { ...p, ...data } : p));
     setPartners(next);
-    save(LS.PARTNERS, next);
     setEditTarget(null);
     showToast("success", "저장되었습니다.");
   };

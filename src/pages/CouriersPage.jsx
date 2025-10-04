@@ -1,8 +1,6 @@
 // src/pages/CouriersPage.jsx
 import React from "react";
 import { uid } from "../lib/uid.js";
-import { LS, save } from "../lib/storage.js";
-
 /* ============== 유틸 ============== */
 const parseCost = (s = "") => Number((s + "").replace(/[^\d]/g, "") || 0);
 const fmtCost = (n = 0) => (Number(n) || 0).toLocaleString() + "원";
@@ -305,7 +303,6 @@ export default function CouriersPage({ couriers, setCouriers }) {
   const onCreate = (data) => {
     const next = [...couriers, { id: uid(), ...data }];
     setCouriers(next);
-    save(LS.COURIERS, next);
     setShowModal(false);
     showToast("success", "저장되었습니다.");
   };
@@ -313,7 +310,6 @@ export default function CouriersPage({ couriers, setCouriers }) {
   const onUpdate = (id, data) => {
     const next = couriers.map((c) => (c.id === id ? { ...c, ...data } : c));
     setCouriers(next);
-    save(LS.COURIERS, next);
     setEditTarget(null);
     showToast("success", "저장되었습니다.");
   };
@@ -322,7 +318,6 @@ export default function CouriersPage({ couriers, setCouriers }) {
     if (!confirm("이 택배사를 삭제할까요?")) return;
     const next = couriers.filter((c) => c.id !== id);
     setCouriers(next);
-    save(LS.COURIERS, next);
     showToast("success", "삭제되었습니다.");
   };
 

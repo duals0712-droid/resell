@@ -1,8 +1,6 @@
 // src/pages/CategoriesPage.jsx
 import React from "react";
 import { uid } from "../lib/uid.js";
-import { LS, save } from "../lib/storage.js";
-
 export default function CategoriesPage({ categories, setCategories, brands, setBrands }) {
   // 입력 상태
   const [newMajor, setNewMajor] = React.useState("");
@@ -16,7 +14,6 @@ export default function CategoriesPage({ categories, setCategories, brands, setB
     if (!name) return;
     const next = [...brands, { id: uid(), name }];
     setBrands(next);
-    save(LS.BRANDS, next);
     setBrandInput("");
   };
   const addBrandByEnter = (e) => {
@@ -25,8 +22,7 @@ export default function CategoriesPage({ categories, setCategories, brands, setB
   const removeBrand = (id) => {
     const next = brands.filter((b) => b.id !== id);
     setBrands(next);
-    save(LS.BRANDS, next);
-  };
+    };
 
   // ===== 대분류 추가 =====
   const addMajor = () => {
@@ -40,7 +36,6 @@ export default function CategoriesPage({ categories, setCategories, brands, setB
     };
     const next = [...categories, node];
     setCategories(next);
-    save(LS.CATEGORIES, next);
     setNewMajor("");
     setFirstMinor("");
   };
@@ -52,8 +47,7 @@ export default function CategoriesPage({ categories, setCategories, brands, setB
     if (name === null) return;
     const next = categories.map((c) => (c.id === id ? { ...c, name: name.trim() || c.name } : c));
     setCategories(next);
-    save(LS.CATEGORIES, next);
-  };
+    };
   const renameMinor = (mid, cid) => {
     const curM = categories.find((c) => c.id === mid);
     const cur = curM?.children?.find((x) => x.id === cid);
@@ -65,24 +59,21 @@ export default function CategoriesPage({ categories, setCategories, brands, setB
       return { ...c, children: kids };
     });
     setCategories(next);
-    save(LS.CATEGORIES, next);
-  };
+    };
 
   // ===== 삭제 =====
   const removeMajor = (id) => {
     if (!confirm("이 대분류와 소분류가 모두 삭제됩니다. 계속할까요?")) return;
     const next = categories.filter((c) => c.id !== id);
     setCategories(next);
-    save(LS.CATEGORIES, next);
-  };
+    };
   const removeMinor = (mid, cid) => {
     const next = categories.map((c) => {
       if (c.id !== mid) return c;
       return { ...c, children: (c.children || []).filter((k) => k.id !== cid) };
     });
     setCategories(next);
-    save(LS.CATEGORIES, next);
-  };
+    };
 
   // ===== 소분류 입력(Enter로 추가) =====
   const addMinorEnter = (e, mid) => {
@@ -95,7 +86,6 @@ export default function CategoriesPage({ categories, setCategories, brands, setB
       return { ...c, children: kids };
     });
     setCategories(next);
-    save(LS.CATEGORIES, next);
     setMinorInputs((s) => ({ ...s, [mid]: "" }));
   };
 

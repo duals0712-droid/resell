@@ -1,7 +1,6 @@
 // src/pages/InOutRegister.jsx
 import React from "react";
 import { uid } from "../lib/uid.js";
-import { LS, load, save } from "../lib/storage.js";
 import { availableQty, allocateFIFO } from "../lib/inventory.js";
 
 /* ========= 유틸 ========= */
@@ -21,7 +20,6 @@ const todayYmd = () => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 };
-const OUTLATER_KEY = "res_outlater_v1";
 
 // 거래일(YYYY-MM-DD)에 현재 시/분/초/밀리초를 끼워 넣어 ISO로 만들기 (FIFO 정렬용)
 function stampWithCurrentTime(ymd) {
@@ -40,11 +38,9 @@ function addMs(iso, ms) {
   return d.toISOString();
 }
 
-function nextLotSeq() {
-  const KEY = "res_lot_seq_v1";
-  const n = (Number(localStorage.getItem(KEY)) || 0) + 1;
-  localStorage.setItem(KEY, String(n));
-  return n;
+function nextLotSeq(lotsArr = []) {
+  const maxSeq = Math.max(0, ...[0, ...lotsArr.map(l => Number(l?.createdSeq) || 0)]);
+  return maxSeq + 1;
 }
 
 /* ========= 미니 토스트 ========= */
@@ -333,18 +329,7 @@ function CourierSelect({ couriers, onPick }) {
 }
 
 /* ========= 입출고 등록 메인 ========= */
-export default function InOutRegister({
-  products,
-  lots,
-  setLots,
-  sales,
-  setSales,
-  ioRec,
-  setIoRec,
-  partners,
-  payments,
-  couriers,
-}) {
+export default function InOutRegister({ products,  lots,  setLots,  sales,  setSales,  ioRec,  setIoRec,  partners,  payments,  couriers,, outLater, setOutLater }) {
   // 탭
   const [mode, setMode] = React.useState("in"); // 'in' | 'out' | 'out-later'
   // 거래일
@@ -556,7 +541,7 @@ export default function InOutRegister({
           receivedYmd: date,
           receivedAt: stamp,
           createdAt: stamp,
-          createdSeq: nextLotSeq(),
+          createdSeq: nextLotSeq(workingLots),
           partnerId: r.partnerId,
           paymentId: r.paymentId,
         };
@@ -580,9 +565,7 @@ export default function InOutRegister({
         });
       });
       setLots(nextLots);
-      save(LS.LOTS, nextLots);
       setIoRec(nextIO);
-      save(LS.IOREC, nextIO);
       setInRows([]);
       showToast("입고 등록 완료", "success");
       return;
@@ -671,7 +654,7 @@ export default function InOutRegister({
       });
     } else if (isOutLater) {
       // 우선출고: 재고만 차감 + 후정산 목록 저장
-      const pending = load(OUTLATER_KEY, []);
+      const pending = (outLater || []).slice();
       activeOutRows.forEach((r, idx) => {
         const stamp = addMs(baseStampOut, idx);
 
@@ -720,16 +703,11 @@ export default function InOutRegister({
           });
         }
       });
-      save(OUTLATER_KEY, pending);
-    }
+      }
 
     setLots(workingLots);
-    save(LS.LOTS, workingLots);
     setSales(newSales);
-    save(LS.SALES, newSales);
     setIoRec(newIO);
-    save(LS.IOREC, newIO);
-
     // 현재 모드의 목록만 비움
     setActiveOutRows([]);
     setActiveFeeRows([]);

@@ -1,6 +1,5 @@
 // src/pages/PaymentsPage.jsx
 import React from "react";
-import { LS, save } from "../lib/storage.js";
 import { uid } from "../lib/uid.js";
 
 const onlyDigits = (s = "") => (s + "").replace(/\D/g, "");
@@ -428,14 +427,12 @@ export default function PaymentsPage({ payments, setPayments }) {
   const onCreate = (data) => {
     const next = [...payments, { id: uid(), createdAt: new Date().toISOString(), ...data }];
     setPayments(next);
-    save(LS.PAYMENTS, next);
     setShowModal(false);
     showToast("success", "저장되었습니다.");
   };
   const onUpdate = (id, data) => {
     const next = payments.map((p) => (p.id === id ? { ...p, ...data } : p));
     setPayments(next);
-    save(LS.PAYMENTS, next);
     setEditTarget(null);
     showToast("success", "저장되었습니다.");
   };
@@ -443,7 +440,6 @@ export default function PaymentsPage({ payments, setPayments }) {
     if (!confirm("이 결제수단을 삭제할까요?")) return;
     const next = payments.filter((p) => p.id !== id);
     setPayments(next);
-    save(LS.PAYMENTS, next);
     showToast("success", "삭제되었습니다.");
   };
 

@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import { uid } from "./lib/uid.js";
+
 import PaymentsPage from "./pages/PaymentsPage.jsx";
 import PartnersPage from "./pages/PartnersPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
@@ -16,8 +17,8 @@ import IoHistoryPage from "./pages/IoHistoryPage.jsx";
 import ReturnsExchangePage from "./pages/ReturnsExchangePage.jsx";
 import LedgerPage from "./pages/LedgerPage.jsx";
 import VatEstimatePage from "./pages/VatEstimatePage.jsx";
+
 import { supabase } from "./lib/supabase.js";
-// 서버 동기화 유틸(최신성 필터 포함)
 import {
   initUserState,
   queueSavePartial,
@@ -25,7 +26,7 @@ import {
 } from "./lib/remoteSync.js";
 
 /* ===========================
-   승인지연 안내
+   승인 대기 패널
    =========================== */
 function ApprovalGate({ email, onRefresh, onLogout }) {
   return (
@@ -78,18 +79,21 @@ function AuthPanel() {
   const [mode, setMode] = useState("signin"); // signin | signup | find_id | reset_pw
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+
   const [usernameLogin, setUsernameLogin] = useState("");
   const [pw, setPw] = useState("");
   const [remember, setRemember] = useState(true);
+
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
+
   const [findEmail, setFindEmail] = useState("");
   const [resetId, setResetId] = useState("");
   const [resetEmail, setResetEmail] = useState("");
-  const firstInputRef = useRef(null);
 
+  const firstInputRef = useRef(null);
   useEffect(() => {
     setMsg("");
     const t = setTimeout(() => firstInputRef.current?.focus?.(), 0);
@@ -114,6 +118,7 @@ function AuthPanel() {
     const uname = usernameLogin.trim();
     if (!uname || !pw.trim()) return setMsg("아이디와 비밀번호를 입력하세요.");
     if (uname.includes("@")) return setMsg("이메일이 아닌 '아이디'를 입력하세요.");
+
     setBusy(true);
     try {
       const emailToUse = await findEmailByUsername(uname);
@@ -137,6 +142,7 @@ function AuthPanel() {
     if (!email.trim()) return setMsg("이메일을 입력하세요.");
     if (!pw1.trim() || !pw2.trim()) return setMsg("비밀번호를 입력하세요.");
     if (pw1 !== pw2) return setMsg("비밀번호가 서로 다릅니다.");
+
     setBusy(true);
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -430,7 +436,7 @@ export default function App() {
     return () => { ignore = true; };
   }, [session?.user?.id]);
 
-  // 서버 상태 (로컬 캐시는 없음)
+  // 서버 상태 (로컬 캐시 없음)
   const [products, setProducts] = useState([]);
   const [lots, setLots] = useState([]);
   const [sales, setSales] = useState([]);
@@ -449,7 +455,7 @@ export default function App() {
   // 하이드레이션 (서버 스냅샷 로딩 완료 여부)
   const [hydrated, setHydrated] = useState(false);
 
-  // 품목 추가 (서버 전용 시퀀스 사용)
+  // 품목 추가(서버 전용 시퀀스 사용)
   const addProduct = (
     code,
     name,
@@ -508,7 +514,7 @@ export default function App() {
           totalPurchase: qty * price,
           memo: "",
         });
-        // 로컬 상태 선반영
+        // 클라이언트 상태 선적용
         setLotSeq(nextSeq);
       }
     });
@@ -518,7 +524,7 @@ export default function App() {
       setIoRec((prev) => [...prev, ...newIO]);
     }
     setProducts(nextProducts);
-    // 실제 서버 저장은 아래 useEffect(디바운스 업서트)들이 처리
+    // 실제 저장은 아래 useEffect(디바운스 업서트)에서 수행
   };
 
   const aggregated = useMemo(
@@ -531,11 +537,11 @@ export default function App() {
     (async () => {
       if (!session?.user || !profileReady) return;
       if (!profile?.approved && !profile?.is_admin) return;
-      setHydrated(false);
 
+      setHydrated(false);
       try {
+        // 비파괴 init: 있으면 그대로, 없으면 빈 스냅샷으로 생성
         const server = await initUserState(session.user.id, {
-          // 로컬 스냅샷은 의미 없음(서버만 사용), 빈값 전달
           products: [],
           lots: [],
           sales: [],
@@ -587,7 +593,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, profile?.approved, profile?.is_admin, hydrated]);
 
-  /* ========= 서버 저장(디바운스 업서트): 하이드레이션 이후에만 ========= */
+  /* ========= 서버 저장(디바운스 업서트): 하이드레이션 이후만 ========= */
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { partners }); }, [session?.user?.id, hydrated, partners]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { payments }); }, [session?.user?.id, hydrated, payments]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { categories: categoriesState }); }, [session?.user?.id, hydrated, categoriesState]);
@@ -655,7 +661,9 @@ export default function App() {
 
       <div className="grid grid-cols-[260px_1fr]">
         <Sidebar current={current} setCurrent={setCurrent} />
+
         <main className="p-6">
+          {/* ✅ 통합 기초 관리 */}
           {current === "basics" && (
             <BasicsUnifiedPage
               partners={partners}
@@ -671,6 +679,7 @@ export default function App() {
             />
           )}
 
+          {/* 기존 개별 페이지 */}
           {current === "partners" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <PartnersPage partners={partners} setPartners={setPartners} />
@@ -697,6 +706,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 상품/입출고/반품/내역 */}
           {current === "products" && (
             <ProductsPage
               products={products}
@@ -744,6 +754,7 @@ export default function App() {
             />
           )}
 
+          {/* 장부/통계 */}
           {current === "ledger" && (
             <LedgerPage
               products={products}

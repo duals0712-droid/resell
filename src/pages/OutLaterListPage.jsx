@@ -1,9 +1,7 @@
 // src/pages/OutLaterListPage.jsx
 import React from "react";
 import { uid } from "../lib/uid.js";
-import { LS, load, save } from "../lib/storage.js";
 
-const OUTLATER_KEY = "res_outlater_v1";
 const fmt = (n) => (Number(n) || 0).toLocaleString();
 
 // 숫자 유틸 (입력시 천단위 콤마)
@@ -39,11 +37,11 @@ function Toast({ open, type = "success", message = "" }) {
   );
 }
 
-export default function OutLaterListPage({ partners, sales, setSales }) {
-  const [items, setItems] = React.useState(load(OUTLATER_KEY, []));
+export default function OutLaterListPage({ products, partners, outLater, setOutLater, sales, setSales }) {
+  const items = outLater || [];
+  const setItems = setOutLater;
   const [q, setQ] = React.useState("");
   // 제품 정보(브랜드/분류/이미지 표시용)
-  const [products] = React.useState(load(LS.PRODUCTS, []));
   // 큰 이미지 미리보기
   const [previewImage, setPreviewImage] = React.useState(null);
 
@@ -118,7 +116,6 @@ export default function OutLaterListPage({ partners, sales, setSales }) {
     const cleaned = withCommas(val);
     setItems((arr) => {
       const next = arr.map((it) => (it.id === id ? { ...it, settlementPrice: cleaned } : it));
-      save(OUTLATER_KEY, next);
       return next;
     });
   };
@@ -126,7 +123,6 @@ export default function OutLaterListPage({ partners, sales, setSales }) {
   const onDelete = (id) => {
     setItems((arr) => {
       const next = arr.filter((it) => it.id !== id);
-      save(OUTLATER_KEY, next);
       return next;
     });
     showToast("success", "항목을 삭제했습니다.");
@@ -171,9 +167,7 @@ export default function OutLaterListPage({ partners, sales, setSales }) {
       next = next.filter((x) => x.id !== it.id);
     });
 
-    save(OUTLATER_KEY, next);
     setItems(next);
-    save(LS.SALES, newSales);
     setSales(newSales);
 
     showToast("success", "정산이 완료되었습니다.");
