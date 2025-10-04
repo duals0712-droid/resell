@@ -787,7 +787,7 @@ export default function App() {
               products={products}              // ✅ products도 같이 내려주기
               partners={partners}
               outLater={outLater}              // ✅ 우선출고 내려줌
-              setOutLater={setOutLater}       // ✅ 우선출고 내려줌
+              setOutLater={setOutLater}       // ✅ 우선출고 내려줌/
               sales={sales}
               setSales={setSales}
             />

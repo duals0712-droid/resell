@@ -3,7 +3,7 @@ import { supabase } from "./supabase.js";
 
 const TABLE = "user_state_v1";
 
-// 최신성 비교용 타임스탬프(클라이언트가 마지막으로 적용한 서버 updated_at)
+// 최신성 비교용 타임스탬프(클라이언트가 마지막으로 적용한 서버 updated_at))
 let lastAppliedAt = 0;
 
 // ===== 1) 초기 로드 (비파괴) =====
