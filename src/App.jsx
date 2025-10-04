@@ -1,19 +1,12 @@
 // src/App.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
-import {
-  LS,
-  load,
-  save,
-  setStorageNamespace,
-  migrateLocalDataToNamespace,
-} from "./lib/storage.js";
 import { uid } from "./lib/uid.js";
 import PaymentsPage from "./pages/PaymentsPage.jsx";
 import PartnersPage from "./pages/PartnersPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import CouriersPage from "./pages/CouriersPage.jsx";
-import BasicsUnifiedPage from "./pages/BasicsUnifiedPage.jsx"; // ✅ 통합 기초관리 페이지
+import BasicsUnifiedPage from "./pages/BasicsUnifiedPage.jsx";
 import ProductsPage from "./pages/ProductsPage.jsx";
 import InOutRegister from "./pages/InOutRegister.jsx";
 import OutLaterListPage from "./pages/OutLaterListPage.jsx";
@@ -24,7 +17,7 @@ import ReturnsExchangePage from "./pages/ReturnsExchangePage.jsx";
 import LedgerPage from "./pages/LedgerPage.jsx";
 import VatEstimatePage from "./pages/VatEstimatePage.jsx";
 import { supabase } from "./lib/supabase.js";
-// ✅ 서버 동기화 유틸
+// 서버 동기화 유틸(최신성 필터 포함)
 import {
   initUserState,
   queueSavePartial,
@@ -82,44 +75,27 @@ function Topbar({ sessionEmail, approved, onSignOut }) {
    로그인/회원가입/찾기 패널
    =========================== */
 function AuthPanel() {
-  // 모드: signin | signup | find_id | reset_pw
-  const [mode, setMode] = useState("signin");
-
-  // 공통
+  const [mode, setMode] = useState("signin"); // signin | signup | find_id | reset_pw
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-
-  // 로그인(아이디 전용)
-  const [usernameLogin, setUsernameLogin] = useState(
-    localStorage.getItem("res_last_username") || ""
-  );
+  const [usernameLogin, setUsernameLogin] = useState("");
   const [pw, setPw] = useState("");
   const [remember, setRemember] = useState(true);
-  useEffect(() => {
-    if (remember) localStorage.setItem("res_last_username", usernameLogin);
-    else localStorage.removeItem("res_last_username");
-  }, [usernameLogin, remember]);
-
-  // 회원가입
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
-
-  // 아이디/비밀번호 찾기
   const [findEmail, setFindEmail] = useState("");
   const [resetId, setResetId] = useState("");
   const [resetEmail, setResetEmail] = useState("");
-
-  // 포커스 복원용
   const firstInputRef = useRef(null);
+
   useEffect(() => {
     setMsg("");
     const t = setTimeout(() => firstInputRef.current?.focus?.(), 0);
     return () => clearTimeout(t);
   }, [mode]);
 
-  // --- RPC 도우미 ---
   const findEmailByUsername = async (uname) => {
     try {
       const { data, error } = await supabase.rpc("get_email_by_username", {
@@ -132,14 +108,12 @@ function AuthPanel() {
     }
   };
 
-  // --- 액션들 ---
   const doSignIn = async (e) => {
     e?.preventDefault?.();
     setMsg("");
     const uname = usernameLogin.trim();
     if (!uname || !pw.trim()) return setMsg("아이디와 비밀번호를 입력하세요.");
     if (uname.includes("@")) return setMsg("이메일이 아닌 '아이디'를 입력하세요.");
-
     setBusy(true);
     try {
       const emailToUse = await findEmailByUsername(uname);
@@ -163,7 +137,6 @@ function AuthPanel() {
     if (!email.trim()) return setMsg("이메일을 입력하세요.");
     if (!pw1.trim() || !pw2.trim()) return setMsg("비밀번호를 입력하세요.");
     if (pw1 !== pw2) return setMsg("비밀번호가 서로 다릅니다.");
-
     setBusy(true);
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -227,7 +200,6 @@ function AuthPanel() {
     }
   };
 
-  // --- 카드 래퍼(고정) ---
   return (
     <div className="min-h-screen grid place-items-center bg-gradient-to-br from-indigo-50 to-white">
       <div className="w-full max-w-md rounded-3xl border bg-white/80 backdrop-blur shadow-lg p-8">
@@ -246,7 +218,7 @@ function AuthPanel() {
           </div>
         </div>
 
-        {/* 로그인 (항상 DOM에 존재, hidden 토글) */}
+        {/* 로그인 */}
         <form hidden={mode !== "signin"} className="space-y-3" onSubmit={doSignIn}>
           <input
             ref={firstInputRef}
@@ -413,10 +385,10 @@ function AuthPanel() {
 }
 
 /* ===========================
-   메인 앱
+   메인 앱 (서버 전용)
    =========================== */
 export default function App() {
-  // Auth 세션
+  // 인증
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -433,7 +405,7 @@ export default function App() {
     return () => sub && sub.unsubscribe();
   }, []);
 
-  // 관리자 승인 체크: 프로필
+  // 프로필 승인
   const [profile, setProfile] = useState(null);
   const [profileReady, setProfileReady] = useState(false);
 
@@ -452,72 +424,32 @@ export default function App() {
         .eq("id", session.user.id)
         .single();
       if (ignore) return;
-      if (error) setProfile(null);
-      else setProfile(data || null);
+      setProfile(error ? null : (data || null));
       setProfileReady(true);
     })();
     return () => { ignore = true; };
   }, [session?.user?.id]);
 
-  // 네임스페이스 적용 & 게스트 데이터 마이그레이션
-  useEffect(() => {
-    if (!session?.user) {
-      setStorageNamespace("");
-    } else {
-      const ns = `user:${session.user.id}`;
-      setStorageNamespace(ns);
-      const flagKey = `res_migrated_${session.user.id}`;
-      const already = localStorage.getItem(flagKey);
-      if (!already) {
-        migrateLocalDataToNamespace(ns, Object.values(LS), { overwrite: false });
-        localStorage.setItem(flagKey, "1");
-      }
-    }
-    reloadAllStates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id]);
-
-  // 전역 상태들
-  const [products, setProducts] = useState(load(LS.PRODUCTS, []));
-  const [lots, setLots] = useState(load(LS.LOTS, []));
-  const [sales, setSales] = useState(load(LS.SALES, []));
-  const [ioRec, setIoRec] = useState(load(LS.IOREC, []));
-  const [partners, setPartners] = useState(load(LS.PARTNERS, []));
-  const [payments, setPayments] = useState(load(LS.PAYMENTS, []));
-  const [categoriesState, setCategoriesState] = useState(load(LS.CATEGORIES, []));
-  const [brands, setBrands] = useState(load(LS.BRANDS, []));
-  const [couriers, setCouriers] = useState(load(LS.COURIERS, []));
-
-  useEffect(() => save(LS.PRODUCTS, products), [products]);
-  useEffect(() => save(LS.LOTS, lots), [lots]);
-  useEffect(() => save(LS.SALES, sales), [sales]);
-  useEffect(() => save(LS.IOREC, ioRec), [ioRec]);
-  useEffect(() => save(LS.PARTNERS, partners), [partners]);
-  useEffect(() => save(LS.PAYMENTS, payments), [payments]);
-  useEffect(() => save(LS.CATEGORIES, categoriesState), [categoriesState]);
-  useEffect(() => save(LS.BRANDS, brands), [brands]);
-  useEffect(() => save(LS.COURIERS, couriers), [couriers]);
-
-  const reloadAllStates = () => {
-    setProducts(load(LS.PRODUCTS, []));
-    setLots(load(LS.LOTS, []));
-    setSales(load(LS.SALES, []));
-    setIoRec(load(LS.IOREC, []));
-    setPartners(load(LS.PARTNERS, []));
-    setPayments(load(LS.PAYMENTS, []));
-    setCategoriesState(load(LS.CATEGORIES, []));
-    setBrands(load(LS.BRANDS, []));
-    setCouriers(load(LS.COURIERS, []));
-  };
+  // 서버 상태 (로컬 캐시는 없음)
+  const [products, setProducts] = useState([]);
+  const [lots, setLots] = useState([]);
+  const [sales, setSales] = useState([]);
+  const [ioRec, setIoRec] = useState([]);
+  const [partners, setPartners] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [categoriesState, setCategoriesState] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [couriers, setCouriers] = useState([]);
+  const [lotSeq, setLotSeq] = useState(0);
 
   // 초기 탭/재고 패널
   const [current, setCurrent] = useState("ledger");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // ✅ 하이드레이션 완료 플래그 (서버 스냅샷 로드 완료 시 true)
+  // 하이드레이션 (서버 스냅샷 로딩 완료 여부)
   const [hydrated, setHydrated] = useState(false);
 
-  // 품목 추가
+  // 품목 추가 (서버 전용 시퀀스 사용)
   const addProduct = (
     code,
     name,
@@ -542,8 +474,6 @@ export default function App() {
       category: category || "",
     };
     const nextProducts = [...products, product];
-    setProducts(nextProducts);
-    save(LS.PRODUCTS, nextProducts);
 
     const newLots = [];
     const newIO = [];
@@ -553,13 +483,7 @@ export default function App() {
       const size = e?.size || "";
       if (qty > 0 && size) {
         const receivedAt = new Date().toISOString();
-        const seqKey = "res_lot_seq_v1";
-        const nextSeq = (Number(localStorage.getItem(seqKey)) || 0) + 1;
-        localStorage.setItem(seqKey, String(nextSeq));
-        // ✅ lot_seq도 서버에 반영 (하이드레이션 이후에만)
-        if (session?.user?.id && hydrated) {
-          queueSavePartial(session.user.id, { lot_seq: nextSeq });
-        }
+        const nextSeq = (Number(lotSeq) || 0) + 1;
         const lot = {
           id: uid(),
           productId: product.id,
@@ -584,19 +508,17 @@ export default function App() {
           totalPurchase: qty * price,
           memo: "",
         });
+        // 로컬 상태 선반영
+        setLotSeq(nextSeq);
       }
     });
 
     if (newLots.length) {
-      const nextLots = [...lots, ...newLots];
-      setLots(nextLots);
-      save(LS.LOTS, nextLots);
+      setLots((prev) => [...prev, ...newLots]);
+      setIoRec((prev) => [...prev, ...newIO]);
     }
-    if (newIO.length) {
-      const nextIO = [...ioRec, ...newIO];
-      setIoRec(nextIO);
-      save(LS.IOREC, nextIO);
-    }
+    setProducts(nextProducts);
+    // 실제 서버 저장은 아래 useEffect(디바운스 업서트)들이 처리
   };
 
   const aggregated = useMemo(
@@ -604,30 +526,28 @@ export default function App() {
     [products, lots]
   );
 
-  /* ========= ✅ 서버 동기화: 초기 로드 ========= */
+  /* ========= 서버 동기화: 초기 로드 ========= */
   useEffect(() => {
     (async () => {
       if (!session?.user || !profileReady) return;
       if (!profile?.approved && !profile?.is_admin) return;
-      setHydrated(false); // 새 사용자/프로필 기준으로 다시 하이드레이트
+      setHydrated(false);
 
       try {
-        const localSnapshot = {
-          products,
-          lots,
-          sales,
-          iorec: ioRec,
-          partners,
-          payments,
-          categories: categoriesState,
-          brands,
-          couriers,
-          lot_seq: Number(localStorage.getItem("res_lot_seq_v1") || 0),
-        };
+        const server = await initUserState(session.user.id, {
+          // 로컬 스냅샷은 의미 없음(서버만 사용), 빈값 전달
+          products: [],
+          lots: [],
+          sales: [],
+          iorec: [],
+          partners: [],
+          payments: [],
+          categories: [],
+          brands: [],
+          couriers: [],
+          lot_seq: 0,
+        });
 
-        const server = await initUserState(session.user.id, localSnapshot);
-
-        // 서버 상태를 기준으로 로컬 상태 덮어쓰기
         setProducts(server.products || []);
         setLots(server.lots || []);
         setSales(server.sales || []);
@@ -637,24 +557,21 @@ export default function App() {
         setCategoriesState(server.categories || []);
         setBrands(server.brands || []);
         setCouriers(server.couriers || []);
-        if (typeof server.lot_seq === "number") {
-          localStorage.setItem("res_lot_seq_v1", String(server.lot_seq));
-        }
+        setLotSeq(Number(server.lot_seq || 0));
       } catch (e) {
         console.error("initUserState failed:", e);
-        // 실패해도 앱은 사용 가능해야 함
       } finally {
-        // ✅ 서버 스냅샷으로 초기 하이드레이션 끝!
         setHydrated(true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, profileReady, profile?.approved, profile?.is_admin]);
 
-  /* ========= ✅ 서버 동기화: 실시간 구독 (하이드레이션 이후) ========= */
+  /* ========= 서버 동기화: 실시간 구독 (하이드레이션 이후) ========= */
   useEffect(() => {
     if (!session?.user || (!profile?.approved && !profile?.is_admin) || !hydrated) return;
     const off = subscribeUserState(session.user.id, (server) => {
+      // updated_at 최신성 필터를 통과한 row만 들어옴
       setProducts(server.products || []);
       setLots(server.lots || []);
       setSales(server.sales || []);
@@ -664,15 +581,13 @@ export default function App() {
       setCategoriesState(server.categories || []);
       setBrands(server.brands || []);
       setCouriers(server.couriers || []);
-      if (typeof server.lot_seq === "number") {
-        localStorage.setItem("res_lot_seq_v1", String(server.lot_seq));
-      }
+      setLotSeq(Number(server.lot_seq || 0));
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, profile?.approved, profile?.is_admin, hydrated]);
 
-  /* ========= ✅ 서버 동기화: 상태 변경 시 저장(디바운스) — 하이드레이션 이후에만 ========= */
+  /* ========= 서버 저장(디바운스 업서트): 하이드레이션 이후에만 ========= */
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { partners }); }, [session?.user?.id, hydrated, partners]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { payments }); }, [session?.user?.id, hydrated, payments]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { categories: categoriesState }); }, [session?.user?.id, hydrated, categoriesState]);
@@ -682,6 +597,7 @@ export default function App() {
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lots }); }, [session?.user?.id, hydrated, lots]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { iorec: ioRec }); }, [session?.user?.id, hydrated, ioRec]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { sales }); }, [session?.user?.id, hydrated, sales]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lot_seq: lotSeq }); }, [session?.user?.id, hydrated, lotSeq]);
 
   /* ---------- 렌더 ---------- */
   if (!authReady)
@@ -706,8 +622,10 @@ export default function App() {
         }}
         onLogout={async () => {
           await supabase.auth.signOut();
-          setStorageNamespace("");
-          reloadAllStates();
+          // 서버 전용: 상태 초기화
+          setProducts([]); setLots([]); setSales([]); setIoRec([]);
+          setPartners([]); setPayments([]); setCategoriesState([]); setBrands([]); setCouriers([]);
+          setLotSeq(0); setHydrated(false);
         }}
       />
     );
@@ -720,15 +638,24 @@ export default function App() {
         approved={!!profile?.approved}
         onSignOut={async () => {
           await supabase.auth.signOut();
-          setStorageNamespace("");
-          reloadAllStates();
+          setProducts([]); setLots([]); setSales([]); setIoRec([]);
+          setPartners([]); setPayments([]); setCategoriesState([]); setBrands([]); setCouriers([]);
+          setLotSeq(0); setHydrated(false);
         }}
       />
+
+      {/* 하이드레이션 전 편집 잠금 오버레이 */}
+      {!hydrated && (
+        <div className="fixed inset-0 z-[999] bg-white/50 backdrop-blur-sm grid place-items-center pointer-events-auto">
+          <div className="px-4 py-2 rounded-xl border bg-white/90 shadow">
+            서버와 초기 동기화 중...
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-[260px_1fr]">
         <Sidebar current={current} setCurrent={setCurrent} />
-
         <main className="p-6">
-          {/* ✅ 통합 기초 관리 */}
           {current === "basics" && (
             <BasicsUnifiedPage
               partners={partners}
@@ -744,7 +671,6 @@ export default function App() {
             />
           )}
 
-          {/* 기존 개별 페이지 */}
           {current === "partners" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <PartnersPage partners={partners} setPartners={setPartners} />
@@ -771,7 +697,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 상품/입출고/반품/내역 */}
           {current === "products" && (
             <ProductsPage
               products={products}
@@ -819,7 +744,6 @@ export default function App() {
             />
           )}
 
-          {/* 장부/통계 */}
           {current === "ledger" && (
             <LedgerPage
               products={products}
@@ -849,7 +773,6 @@ export default function App() {
           )}
         </main>
 
-        {/* 재고 서랍 */}
         <InventoryDrawer
           open={drawerOpen}
           setOpen={setDrawerOpen}

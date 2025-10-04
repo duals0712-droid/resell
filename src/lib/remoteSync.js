@@ -1,34 +1,32 @@
 // src/lib/remoteSync.js
 import { supabase } from "./supabase.js";
 
-/** 서버 테이블 이름 */
 const TABLE = "user_state_v1";
+let lastServerUpdatedAt = null;
 
-/**
- * 서버의 사용자 상태를 로드하거나, 없으면 초기 스냅샷으로 생성합니다.
- * @param {string} userId
- * @param {object} initialSnapshot  // { products, lots, sales, iorec, partners, payments, categories, brands, couriers, lot_seq }
- * @returns {Promise<object>}       // 서버에 저장된 최종 상태(row)
- */
+// ---- 초기 로드 ----
 export async function initUserState(userId, initialSnapshot = {}) {
-  // 1) 내 행이 있는지 확인
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("user_id", userId)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    // PGRST116: row not found
-    console.error("initUserState: select error", error);
+  let existing = null;
+  try {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+    if (error) {
+      if (String(error.code) !== "PGRST116") throw error; // row not found 이외 에러면 throw
+    } else {
+      existing = data || null;
+    }
+  } catch (e) {
+    throw e;
   }
 
-  if (data) {
-    // 이미 서버에 있으면 그걸 쓰자 (서버가 기준)
-    return data;
+  if (existing) {
+    lastServerUpdatedAt = existing.updated_at || null;
+    return existing;
   }
 
-  // 2) 없으면 지금 로컬 스냅샷으로 생성
   const row = {
     user_id: userId,
     products: initialSnapshot.products ?? [],
@@ -40,69 +38,74 @@ export async function initUserState(userId, initialSnapshot = {}) {
     categories: initialSnapshot.categories ?? [],
     brands: initialSnapshot.brands ?? [],
     couriers: initialSnapshot.couriers ?? [],
-    lot_seq: Number(initialSnapshot.lot_seq ?? 0),
+    lot_seq: initialSnapshot.lot_seq ?? 0,
+    updated_at: new Date().toISOString(),
   };
 
-  const { data: upserted, error: upErr } = await supabase
+  const { data: inserted, error: insErr } = await supabase
     .from(TABLE)
-    .upsert(row, { onConflict: "user_id" })
+    .insert(row)
     .select()
     .single();
 
-  if (upErr) {
-    console.error("initUserState: upsert error", upErr);
-    throw upErr;
+  if (insErr) {
+    console.error("initUserState: insert error", insErr);
+    throw insErr;
   }
-  return upserted;
+
+  lastServerUpdatedAt = inserted.updated_at || null;
+  return inserted;
 }
 
-// ---- 저장(업서트) ----
+// ---- 저장(업서트) + 최신성 기록 ----
 let debounceTimer = null;
-let pending = {}; // { key: value } 형식으로 모아뒀다가 한 번에 저장
-let lastPushAt = 0;
+let pending = {};
 
-/**
- * 부분 저장(딥머지 아님, 지정한 컬럼만 갱신). 300ms 디바운스.
- * @param {string} userId
- * @param {object} partial  // 예: { partners: [...]} 또는 { products: [...] }
- */
 export function queueSavePartial(userId, partial) {
   pending = { ...pending, ...partial };
   if (debounceTimer) clearTimeout(debounceTimer);
+
   debounceTimer = setTimeout(async () => {
-    const payload = { user_id: userId, ...pending };
+    const payload = { user_id: userId, ...pending, updated_at: new Date().toISOString() };
     pending = {};
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from(TABLE)
-        .upsert(payload, { onConflict: "user_id" });
+        .upsert(payload, { onConflict: "user_id" })
+        .select("updated_at")
+        .single();
       if (error) throw error;
-      lastPushAt = Date.now();
+      if (data?.updated_at) {
+        lastServerUpdatedAt = data.updated_at;
+      }
     } catch (e) {
       console.error("queueSavePartial upsert error", e);
     }
   }, 300);
 }
 
-/**
- * 실시간 구독: 다른 곳(다른 PC/브라우저)에서 변경되면 콜백 호출
- * @param {string} userId
- * @param {(row: object)=>void} onChange
- * @returns {()=>void} unsubscribe
- */
+// ---- 실시간 구독: 더 '새로운' 것만 반영 ----
 export function subscribeUserState(userId, onChange) {
+  const onlyIfNewer = (row) => {
+    if (!row) return;
+    const rAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+    const lAt = lastServerUpdatedAt ? new Date(lastServerUpdatedAt).getTime() : 0;
+    if (rAt <= lAt) return; // 과거/동일 타임스탬프는 무시
+    lastServerUpdatedAt = row.updated_at;
+    onChange(row);
+  };
+
   const channel = supabase
     .channel(`user_state_${userId}`)
     .on(
       "postgres_changes",
-      { event: "*", schema: "public", table: TABLE, filter: `user_id=eq.${userId}` },
-      (payload) => {
-        // 내가 방금 저장한 내용이 리플리케이트되어 들어오는 경우도 있음 → 그건 무시해도 OK
-        const row = payload.new || payload.old;
-        if (!row) return;
-        // lastPushAt 이후 바로 들어온 echo는 대부분 동일 데이터 → 그냥 덮어써도 문제는 없음.
-        onChange(row);
-      }
+      { event: "INSERT", schema: "public", table: TABLE, filter: `user_id=eq.${userId}` },
+      (payload) => onlyIfNewer(payload.new)
+    )
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: TABLE, filter: `user_id=eq.${userId}` },
+      (payload) => onlyIfNewer(payload.new)
     )
     .subscribe();
 
