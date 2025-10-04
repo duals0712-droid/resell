@@ -35,6 +35,7 @@ export async function initUserState(userId, initialSnapshot = {}) {
     categories: initialSnapshot.categories ?? [],
     brands: initialSnapshot.brands ?? [],
     couriers: initialSnapshot.couriers ?? [],
+    out_later: initialSnapshot.out_later ?? [], // ✅ 우선출고
     lot_seq: Number(initialSnapshot.lot_seq ?? 0),
     // 서버 트리거가 없더라도 안전하게 클라에서 찍어둠(있으면 서버 now()로 덮임)
     updated_at: new Date().toISOString(),

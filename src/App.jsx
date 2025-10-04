@@ -446,6 +446,7 @@ export default function App() {
   const [categoriesState, setCategoriesState] = useState([]);
   const [brands, setBrands] = useState([]);
   const [couriers, setCouriers] = useState([]);
+  const [outLater, setOutLater] = useState([]); // ✅ 우선출고(서버 보관)
   const [lotSeq, setLotSeq] = useState(0);
 
   // 초기 탭/재고 패널
@@ -551,6 +552,7 @@ export default function App() {
           categories: [],
           brands: [],
           couriers: [],
+          out_later: [],     // ✅ 우선출고
           lot_seq: 0,
         });
 
@@ -563,6 +565,7 @@ export default function App() {
         setCategoriesState(server.categories || []);
         setBrands(server.brands || []);
         setCouriers(server.couriers || []);
+        setOutLater(server.out_later || []); // ✅
         setLotSeq(Number(server.lot_seq || 0));
       } catch (e) {
         console.error("initUserState failed:", e);
@@ -587,6 +590,7 @@ export default function App() {
       setCategoriesState(server.categories || []);
       setBrands(server.brands || []);
       setCouriers(server.couriers || []);
+      setOutLater(server.out_later || []); // ✅
       setLotSeq(Number(server.lot_seq || 0));
     });
     return off;
@@ -603,6 +607,7 @@ export default function App() {
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lots }); }, [session?.user?.id, hydrated, lots]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { iorec: ioRec }); }, [session?.user?.id, hydrated, ioRec]);
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { sales }); }, [session?.user?.id, hydrated, sales]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { out_later: outLater }); }, [session?.user?.id, hydrated, outLater]); // ✅ 우선출고 서버 저장
   useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lot_seq: lotSeq }); }, [session?.user?.id, hydrated, lotSeq]);
 
   /* ---------- 렌더 ---------- */
@@ -631,7 +636,7 @@ export default function App() {
           // 서버 전용: 상태 초기화
           setProducts([]); setLots([]); setSales([]); setIoRec([]);
           setPartners([]); setPayments([]); setCategoriesState([]); setBrands([]); setCouriers([]);
-          setLotSeq(0); setHydrated(false);
+          setOutLater([]); setLotSeq(0); setHydrated(false); // ✅
         }}
       />
     );
@@ -646,7 +651,7 @@ export default function App() {
           await supabase.auth.signOut();
           setProducts([]); setLots([]); setSales([]); setIoRec([]);
           setPartners([]); setPayments([]); setCategoriesState([]); setBrands([]); setCouriers([]);
-          setLotSeq(0); setHydrated(false);
+          setOutLater([]); setLotSeq(0); setHydrated(false); // ✅
         }}
       />
 
@@ -730,6 +735,8 @@ export default function App() {
               partners={partners}
               payments={payments}
               couriers={couriers}
+              outLater={outLater}                 // ✅ 우선출고 내려줌
+              setOutLater={setOutLater}          // ✅ 우선출고 내려줌
             />
           )}
           {current === "returns" && (
@@ -777,7 +784,10 @@ export default function App() {
           )}
           {current === "out-later-list" && (
             <OutLaterListPage
+              products={products}              // ✅ products도 같이 내려주기
               partners={partners}
+              outLater={outLater}              // ✅ 우선출고 내려줌
+              setOutLater={setOutLater}       // ✅ 우선출고 내려줌
               sales={sales}
               setSales={setSales}
             />
