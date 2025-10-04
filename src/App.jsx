@@ -24,7 +24,7 @@ import ReturnsExchangePage from "./pages/ReturnsExchangePage.jsx";
 import LedgerPage from "./pages/LedgerPage.jsx";
 import VatEstimatePage from "./pages/VatEstimatePage.jsx";
 import { supabase } from "./lib/supabase.js";
-// ✅ 서버 동기화 유틸 추가
+// ✅ 서버 동기화 유틸
 import {
   initUserState,
   queueSavePartial,
@@ -54,7 +54,7 @@ function ApprovalGate({ email, onRefresh, onLogout }) {
 }
 
 /* ===========================
-   상단바 (바깥에 선언: 타입 안정)
+   상단바
    =========================== */
 function Topbar({ sessionEmail, approved, onSignOut }) {
   if (!sessionEmail) return null;
@@ -80,8 +80,6 @@ function Topbar({ sessionEmail, approved, onSignOut }) {
 
 /* ===========================
    로그인/회원가입/찾기 패널
-   - 한 화면에 모두 유지(hidden 토글)
-   - 내부 컴포넌트 남발 금지
    =========================== */
 function AuthPanel() {
   // 모드: signin | signup | find_id | reset_pw
@@ -117,7 +115,6 @@ function AuthPanel() {
   const firstInputRef = useRef(null);
   useEffect(() => {
     setMsg("");
-    // 모드 전환 시 현재 보이는 폼의 첫 인풋으로 포커스
     const t = setTimeout(() => firstInputRef.current?.focus?.(), 0);
     return () => clearTimeout(t);
   }, [mode]);
@@ -517,6 +514,9 @@ export default function App() {
   const [current, setCurrent] = useState("ledger");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // ✅ 하이드레이션 완료 플래그 (서버 스냅샷 로드 완료 시 true)
+  const [hydrated, setHydrated] = useState(false);
+
   // 품목 추가
   const addProduct = (
     code,
@@ -556,8 +556,8 @@ export default function App() {
         const seqKey = "res_lot_seq_v1";
         const nextSeq = (Number(localStorage.getItem(seqKey)) || 0) + 1;
         localStorage.setItem(seqKey, String(nextSeq));
-        // ✅ lot_seq도 서버에 반영
-        if (session?.user?.id) {
+        // ✅ lot_seq도 서버에 반영 (하이드레이션 이후에만)
+        if (session?.user?.id && hydrated) {
           queueSavePartial(session.user.id, { lot_seq: nextSeq });
         }
         const lot = {
@@ -609,42 +609,51 @@ export default function App() {
     (async () => {
       if (!session?.user || !profileReady) return;
       if (!profile?.approved && !profile?.is_admin) return;
+      setHydrated(false); // 새 사용자/프로필 기준으로 다시 하이드레이트
 
-      const localSnapshot = {
-        products,
-        lots,
-        sales,
-        iorec: ioRec,
-        partners,
-        payments,
-        categories: categoriesState,
-        brands,
-        couriers,
-        lot_seq: Number(localStorage.getItem("res_lot_seq_v1") || 0),
-      };
+      try {
+        const localSnapshot = {
+          products,
+          lots,
+          sales,
+          iorec: ioRec,
+          partners,
+          payments,
+          categories: categoriesState,
+          brands,
+          couriers,
+          lot_seq: Number(localStorage.getItem("res_lot_seq_v1") || 0),
+        };
 
-      const server = await initUserState(session.user.id, localSnapshot);
+        const server = await initUserState(session.user.id, localSnapshot);
 
-      // 서버 상태를 기준으로 로컬 상태 덮어쓰기
-      setProducts(server.products || []);
-      setLots(server.lots || []);
-      setSales(server.sales || []);
-      setIoRec(server.iorec || []);
-      setPartners(server.partners || []);
-      setPayments(server.payments || []);
-      setCategoriesState(server.categories || []);
-      setBrands(server.brands || []);
-      setCouriers(server.couriers || []);
-      if (typeof server.lot_seq === "number") {
-        localStorage.setItem("res_lot_seq_v1", String(server.lot_seq));
+        // 서버 상태를 기준으로 로컬 상태 덮어쓰기
+        setProducts(server.products || []);
+        setLots(server.lots || []);
+        setSales(server.sales || []);
+        setIoRec(server.iorec || []);
+        setPartners(server.partners || []);
+        setPayments(server.payments || []);
+        setCategoriesState(server.categories || []);
+        setBrands(server.brands || []);
+        setCouriers(server.couriers || []);
+        if (typeof server.lot_seq === "number") {
+          localStorage.setItem("res_lot_seq_v1", String(server.lot_seq));
+        }
+      } catch (e) {
+        console.error("initUserState failed:", e);
+        // 실패해도 앱은 사용 가능해야 함
+      } finally {
+        // ✅ 서버 스냅샷으로 초기 하이드레이션 끝!
+        setHydrated(true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, profileReady, profile?.approved, profile?.is_admin]);
 
-  /* ========= ✅ 서버 동기화: 실시간 구독 ========= */
+  /* ========= ✅ 서버 동기화: 실시간 구독 (하이드레이션 이후) ========= */
   useEffect(() => {
-    if (!session?.user || (!profile?.approved && !profile?.is_admin)) return;
+    if (!session?.user || (!profile?.approved && !profile?.is_admin) || !hydrated) return;
     const off = subscribeUserState(session.user.id, (server) => {
       setProducts(server.products || []);
       setLots(server.lots || []);
@@ -661,18 +670,18 @@ export default function App() {
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, profile?.approved, profile?.is_admin]);
+  }, [session?.user?.id, profile?.approved, profile?.is_admin, hydrated]);
 
-  /* ========= ✅ 서버 동기화: 상태 변경 시 저장(디바운스) ========= */
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { partners }); }, [session?.user?.id, partners]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { payments }); }, [session?.user?.id, payments]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { categories: categoriesState }); }, [session?.user?.id, categoriesState]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { brands }); }, [session?.user?.id, brands]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { couriers }); }, [session?.user?.id, couriers]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { products }); }, [session?.user?.id, products]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { lots }); }, [session?.user?.id, lots]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { iorec: ioRec }); }, [session?.user?.id, ioRec]);
-  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { sales }); }, [session?.user?.id, sales]);
+  /* ========= ✅ 서버 동기화: 상태 변경 시 저장(디바운스) — 하이드레이션 이후에만 ========= */
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { partners }); }, [session?.user?.id, hydrated, partners]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { payments }); }, [session?.user?.id, hydrated, payments]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { categories: categoriesState }); }, [session?.user?.id, hydrated, categoriesState]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { brands }); }, [session?.user?.id, hydrated, brands]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { couriers }); }, [session?.user?.id, hydrated, couriers]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { products }); }, [session?.user?.id, hydrated, products]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lots }); }, [session?.user?.id, hydrated, lots]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { iorec: ioRec }); }, [session?.user?.id, hydrated, ioRec]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { sales }); }, [session?.user?.id, hydrated, sales]);
 
   /* ---------- 렌더 ---------- */
   if (!authReady)
@@ -735,7 +744,7 @@ export default function App() {
             />
           )}
 
-          {/* 기존 개별 페이지 분기 (원하면 유지) */}
+          {/* 기존 개별 페이지 */}
           {current === "partners" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <PartnersPage partners={partners} setPartners={setPartners} />
