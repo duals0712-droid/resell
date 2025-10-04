@@ -37,7 +37,7 @@ function Toast({ open, type = "success", message = "" }) {
   );
 }
 
-export default function OutLaterListPage({ products, partners, outLater, setOutLater, sales, setSales }) {
+export default function OutLaterListPage({ partners, sales, setSales, products, outLater, setOutLater }) {
   const items = outLater || [];
   const setItems = setOutLater;
   const [q, setQ] = React.useState("");

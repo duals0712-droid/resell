@@ -25,7 +25,9 @@ import {
   subscribeUserState,
 } from "./lib/remoteSync.js";
 
-/* ---------- 승인 대기 패널 ---------- */
+/* ===========================
+   승인 대기 패널
+   =========================== */
 function ApprovalGate({ email, onRefresh, onLogout }) {
   return (
     <div className="min-h-screen grid place-items-center bg-gray-50">
@@ -37,19 +39,17 @@ function ApprovalGate({ email, onRefresh, onLogout }) {
           승인 후 이용하실 수 있어요.
         </p>
         <div className="mt-4 flex justify-center gap-2">
-          <button onClick={onRefresh} className="px-4 py-2 rounded-xl border hover:bg-gray-50">
-            새로고침
-          </button>
-          <button onClick={onLogout} className="px-4 py-2 rounded-xl bg-gray-900 text-white">
-            로그아웃
-          </button>
+          <button onClick={onRefresh} className="px-4 py-2 rounded-xl border hover:bg-gray-50">새로고침</button>
+          <button onClick={onLogout} className="px-4 py-2 rounded-xl bg-gray-900 text-white">로그아웃</button>
         </div>
       </div>
     </div>
   );
 }
 
-/* ---------- 상단바 ---------- */
+/* ===========================
+   상단바
+   =========================== */
 function Topbar({ sessionEmail, approved, onSignOut }) {
   if (!sessionEmail) return null;
   return (
@@ -57,13 +57,9 @@ function Topbar({ sessionEmail, approved, onSignOut }) {
       <div className="text-sm text-gray-600">
         로그인: <span className="font-medium">{sessionEmail}</span>
         {approved ? (
-          <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">
-            승인됨
-          </span>
+          <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">승인됨</span>
         ) : (
-          <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">
-            승인대기
-          </span>
+          <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">승인대기</span>
         )}
       </div>
       <button className="px-3 py-1 rounded-lg border hover:bg-gray-50" onClick={onSignOut}>
@@ -73,7 +69,9 @@ function Topbar({ sessionEmail, approved, onSignOut }) {
   );
 }
 
-/* ---------- 로그인/회원가입/찾기 ---------- */
+/* ===========================
+   로그인/회원가입/찾기 패널
+   =========================== */
 function AuthPanel() {
   const [mode, setMode] = useState("signin"); // signin | signup | find_id | reset_pw
   const [busy, setBusy] = useState(false);
@@ -93,7 +91,6 @@ function AuthPanel() {
   const [resetEmail, setResetEmail] = useState("");
 
   const firstInputRef = useRef(null);
-
   useEffect(() => {
     setMsg("");
     const t = setTimeout(() => firstInputRef.current?.focus?.(), 0);
@@ -152,10 +149,10 @@ function AuthPanel() {
       if (error) throw error;
       const uid = data.user?.id;
       if (uid) {
-        await supabase
-          .from("profiles")
-          .update({ username: username.trim(), email: email.trim() })
-          .eq("id", uid);
+        await supabase.from("profiles").update({
+          username: username.trim(),
+          email: email.trim(),
+        }).eq("id", uid);
       }
       setMsg("회원가입 요청이 접수되었습니다. 관리자 승인 후 로그인 가능합니다.");
       setMode("signin");
@@ -195,9 +192,10 @@ function AuthPanel() {
       if (!data || data !== resetEmail.trim()) {
         return setMsg("아이디/이메일이 일치하지 않습니다.");
       }
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-        redirectTo: window.location.origin + "/",
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        resetEmail.trim(),
+        { redirectTo: window.location.origin + "/" }
+      );
       if (error) throw error;
       setMsg("재설정 링크를 이메일로 보냈습니다. 메일함을 확인하세요.");
     } catch {
@@ -251,32 +249,22 @@ function AuthPanel() {
               로그인 정보 저장
             </label>
             <div className="flex gap-3">
-              <button type="button" onClick={() => setMode("find_id")} className="hover:underline">
-                아이디 찾기
-              </button>
+              <button type="button" onClick={() => setMode("find_id")} className="hover:underline">아이디 찾기</button>
               <span className="text-gray-300">|</span>
-              <button type="button" onClick={() => setMode("reset_pw")} className="hover:underline">
-                비밀번호 찾기
-              </button>
+              <button type="button" onClick={() => setMode("reset_pw")} className="hover:underline">비밀번호 찾기</button>
             </div>
           </div>
           <button
             type="submit"
             disabled={busy}
-            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${
-              busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"
-            }`}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"}`}
           >
             로그인 →
           </button>
           {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
           <div className="text-center text-sm text-gray-600">
             계정이 없으신가요?{" "}
-            <button
-              type="button"
-              className="text-indigo-600 font-medium hover:underline"
-              onClick={() => setMode("signup")}
-            >
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signup")}>
               회원가입
             </button>
           </div>
@@ -319,20 +307,14 @@ function AuthPanel() {
           <button
             type="submit"
             disabled={busy}
-            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${
-              busy ? "bg-gray-400" : "bg-emerald-600 hover:-translate-y-0.5 hover:bg-emerald-700"
-            }`}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-emerald-600 hover:-translate-y-0.5 hover:bg-emerald-700"}`}
           >
             회원가입 요청
           </button>
           {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
           <div className="text-center text-sm text-gray-600">
             이미 계정이 있으신가요?{" "}
-            <button
-              type="button"
-              className="text-indigo-600 font-medium hover:underline"
-              onClick={() => setMode("signin")}
-            >
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signin")}>
               로그인
             </button>
           </div>
@@ -352,19 +334,13 @@ function AuthPanel() {
           <button
             type="submit"
             disabled={busy}
-            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${
-              busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"
-            }`}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"}`}
           >
             아이디 찾기
           </button>
           {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
           <div className="text-center text-sm text-gray-600">
-            <button
-              type="button"
-              className="text-indigo-600 font-medium hover:underline"
-              onClick={() => setMode("signin")}
-            >
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signin")}>
               로그인으로
             </button>
           </div>
@@ -391,19 +367,13 @@ function AuthPanel() {
           <button
             type="submit"
             disabled={busy}
-            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${
-              busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"
-            }`}
+            className={`w-full py-3 rounded-2xl text-white font-semibold transition ${busy ? "bg-gray-400" : "bg-indigo-600 hover:-translate-y-0.5 hover:bg-indigo-700"}`}
           >
             비밀번호 재설정 링크 보내기
           </button>
           {msg && <div className="text-center text-rose-600 text-sm">{msg}</div>}
           <div className="text-center text-sm text-gray-600">
-            <button
-              type="button"
-              className="text-indigo-600 font-medium hover:underline"
-              onClick={() => setMode("signin")}
-            >
+            <button type="button" className="text-indigo-600 font-medium hover:underline" onClick={() => setMode("signin")}>
               로그인으로
             </button>
           </div>
@@ -417,8 +387,11 @@ function AuthPanel() {
   );
 }
 
-/* ---------- 메인 앱(서버 전용) ---------- */
+/* ===========================
+   메인 앱 (서버 전용)
+   =========================== */
 export default function App() {
+  // 인증
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -435,6 +408,7 @@ export default function App() {
     return () => sub && sub.unsubscribe();
   }, []);
 
+  // 프로필 승인
   const [profile, setProfile] = useState(null);
   const [profileReady, setProfileReady] = useState(false);
 
@@ -453,15 +427,13 @@ export default function App() {
         .eq("id", session.user.id)
         .single();
       if (ignore) return;
-      setProfile(error ? null : data || null);
+      setProfile(error ? null : (data || null));
       setProfileReady(true);
     })();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, [session?.user?.id]);
 
-  // 서버 상태 원장
+  // 서버 상태 (로컬 캐시 없음)
   const [products, setProducts] = useState([]);
   const [lots, setLots] = useState([]);
   const [sales, setSales] = useState([]);
@@ -471,14 +443,17 @@ export default function App() {
   const [categoriesState, setCategoriesState] = useState([]);
   const [brands, setBrands] = useState([]);
   const [couriers, setCouriers] = useState([]);
-  const [outLater, setOutLater] = useState([]);
+  const [outLater, setOutLater] = useState([]); // 우선출고 보관함
   const [lotSeq, setLotSeq] = useState(0);
 
+  // 초기 탭/재고 패널
   const [current, setCurrent] = useState("ledger");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // 하이드레이션(서버 스냅샷 로딩 완료 여부)
   const [hydrated, setHydrated] = useState(false);
 
+  // 품목 추가(서버 전용 시퀀스 사용)
   const addProduct = (
     code,
     name,
@@ -537,7 +512,7 @@ export default function App() {
           totalPurchase: qty * price,
           memo: "",
         });
-        setLotSeq(nextSeq);
+        setLotSeq(nextSeq); // 클라이언트 상태 선적용
       }
     });
 
@@ -546,11 +521,15 @@ export default function App() {
       setIoRec((prev) => [...prev, ...newIO]);
     }
     setProducts(nextProducts);
+    // 실제 저장은 아래 useEffect(디바운스 업서트)에서 수행
   };
 
-  const aggregated = useMemo(() => computeAggregated(products, lots), [products, lots]);
+  const aggregated = useMemo(
+    () => computeAggregated(products, lots),
+    [products, lots]
+  );
 
-  // 초기 로드
+  /* ========= 서버 동기화: 초기 로드 ========= */
   useEffect(() => {
     (async () => {
       if (!session?.user || !profileReady) return;
@@ -558,6 +537,7 @@ export default function App() {
 
       setHydrated(false);
       try {
+        // 비파괴 init: 있으면 그대로, 없으면 빈 스냅샷으로 생성
         const server = await initUserState(session.user.id, {
           products: [],
           lots: [],
@@ -592,7 +572,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, profileReady, profile?.approved, profile?.is_admin]);
 
-  // 실시간 구독
+  /* ========= 서버 동기화: 실시간 구독 (하이드레이션 이후) ========= */
   useEffect(() => {
     if (!session?.user || (!profile?.approved && !profile?.is_admin) || !hydrated) return;
     const off = subscribeUserState(session.user.id, (server) => {
@@ -612,45 +592,25 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, profile?.approved, profile?.is_admin, hydrated]);
 
-  // 디바운스 저장
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { partners });
-  }, [session?.user?.id, hydrated, partners]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { payments });
-  }, [session?.user?.id, hydrated, payments]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated)
-      queueSavePartial(session.user.id, { categories: categoriesState });
-  }, [session?.user?.id, hydrated, categoriesState]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { brands });
-  }, [session?.user?.id, hydrated, brands]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { couriers });
-  }, [session?.user?.id, hydrated, couriers]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { products });
-  }, [session?.user?.id, hydrated, products]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lots });
-  }, [session?.user?.id, hydrated, lots]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { iorec: ioRec });
-  }, [session?.user?.id, hydrated, ioRec]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { sales });
-  }, [session?.user?.id, hydrated, sales]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { out_later: outLater });
-  }, [session?.user?.id, hydrated, outLater]);
-  useEffect(() => {
-    if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lot_seq: lotSeq });
-  }, [session?.user?.id, hydrated, lotSeq]);
+  /* ========= 서버 저장(디바운스 업서트): 하이드레이션 이후만 ========= */
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { partners }); }, [session?.user?.id, hydrated, partners]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { payments }); }, [session?.user?.id, hydrated, payments]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { categories: categoriesState }); }, [session?.user?.id, hydrated, categoriesState]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { brands }); }, [session?.user?.id, hydrated, brands]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { couriers }); }, [session?.user?.id, hydrated, couriers]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { products }); }, [session?.user?.id, hydrated, products]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lots }); }, [session?.user?.id, hydrated, lots]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { iorec: ioRec }); }, [session?.user?.id, hydrated, ioRec]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { sales }); }, [session?.user?.id, hydrated, sales]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { out_later: outLater }); }, [session?.user?.id, hydrated, outLater]);
+  useEffect(() => { if (session?.user?.id && hydrated) queueSavePartial(session.user.id, { lot_seq: lotSeq }); }, [session?.user?.id, hydrated, lotSeq]);
 
+  /* ---------- 렌더 ---------- */
   if (!authReady)
     return <div className="min-h-screen grid place-items-center text-gray-500">초기화 중...</div>;
+
   if (!session) return <AuthPanel />;
+
   if (!profileReady)
     return <div className="min-h-screen grid place-items-center text-gray-500">프로필 확인 중...</div>;
 
@@ -668,18 +628,9 @@ export default function App() {
         }}
         onLogout={async () => {
           await supabase.auth.signOut();
-          setProducts([]);
-          setLots([]);
-          setSales([]);
-          setIoRec([]);
-          setPartners([]);
-          setPayments([]);
-          setCategoriesState([]);
-          setBrands([]);
-          setCouriers([]);
-          setOutLater([]);
-          setLotSeq(0);
-          setHydrated(false);
+          setProducts([]); setLots([]); setSales([]); setIoRec([]);
+          setPartners([]); setPayments([]); setCategoriesState([]); setBrands([]); setCouriers([]);
+          setOutLater([]); setLotSeq(0); setHydrated(false);
         }}
       />
     );
@@ -692,24 +643,18 @@ export default function App() {
         approved={!!profile?.approved}
         onSignOut={async () => {
           await supabase.auth.signOut();
-          setProducts([]);
-          setLots([]);
-          setSales([]);
-          setIoRec([]);
-          setPartners([]);
-          setPayments([]);
-          setCategoriesState([]);
-          setBrands([]);
-          setCouriers([]);
-          setOutLater([]);
-          setLotSeq(0);
-          setHydrated(false);
+          setProducts([]); setLots([]); setSales([]); setIoRec([]);
+          setPartners([]); setPayments([]); setCategoriesState([]); setBrands([]); setCouriers([]);
+          setOutLater([]); setLotSeq(0); setHydrated(false);
         }}
       />
 
+      {/* 하이드레이션 전 편집 잠금 오버레이 */}
       {!hydrated && (
         <div className="fixed inset-0 z-[999] bg-white/50 backdrop-blur-sm grid place-items-center pointer-events-auto">
-          <div className="px-4 py-2 rounded-xl border bg-white/90 shadow">서버와 초기 동기화 중...</div>
+          <div className="px-4 py-2 rounded-xl border bg-white/90 shadow">
+            서버와 초기 동기화 중...
+          </div>
         </div>
       )}
 
@@ -717,6 +662,7 @@ export default function App() {
         <Sidebar current={current} setCurrent={setCurrent} />
 
         <main className="p-6">
+          {/* ✅ 통합 기초 관리 */}
           {current === "basics" && (
             <BasicsUnifiedPage
               partners={partners}
@@ -732,6 +678,7 @@ export default function App() {
             />
           )}
 
+          {/* 기존 개별 페이지 */}
           {current === "partners" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <PartnersPage partners={partners} setPartners={setPartners} />
@@ -758,6 +705,7 @@ export default function App() {
             </div>
           )}
 
+          {/* 상품/입출고/반품/내역 */}
           {current === "products" && (
             <ProductsPage
               products={products}
@@ -807,6 +755,7 @@ export default function App() {
             />
           )}
 
+          {/* 장부/통계 */}
           {current === "ledger" && (
             <LedgerPage
               products={products}
@@ -829,12 +778,12 @@ export default function App() {
           )}
           {current === "out-later-list" && (
             <OutLaterListPage
-              products={products}
               partners={partners}
-              outLater={outLater}
-              setOutLater={setOutLater}
               sales={sales}
               setSales={setSales}
+              products={products}
+              outLater={outLater}
+              setOutLater={setOutLater}
             />
           )}
         </main>

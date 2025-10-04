@@ -334,8 +334,8 @@ export default function LedgerPage({
   useEffect(() => () => toastRef.current && clearTimeout(toastRef.current), []);
 
   // 수기 데이터
-  const [manual, setManual] = useState(load(MANUAL_KEY, []));
-  const refreshManual = () => setManual(load(MANUAL_KEY, []));
+  const [manual, setManual] = useState([]);
+  const refreshManual = () => {};
 
   // 기본 월(진입 시점)
   const now = new Date();

@@ -329,7 +329,7 @@ function CourierSelect({ couriers, onPick }) {
 }
 
 /* ========= 입출고 등록 메인 ========= */
-export default function InOutRegister({ products,  lots,  setLots,  sales,  setSales,  ioRec,  setIoRec,  partners,  payments,  couriers, outLater, setOutLater, }) {
+export default function InOutRegister({ products, lots, setLots, sales, setSales, ioRec, setIoRec, partners, payments, couriers, outLater, setOutLater }) {
   // 탭
   const [mode, setMode] = React.useState("in"); // 'in' | 'out' | 'out-later'
   // 거래일
