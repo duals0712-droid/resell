@@ -161,25 +161,11 @@ export default function Sidebar({ current, setCurrent }) {
             />
             <Collapse open={openGroup.base}>
               <div className="pl-3 pt-2 space-y-1">
+                {/* ✅ 통합 페이지로 교체 */}
                 <NavItem
-                  label="거래처 관리"
-                  active={current === "partners"}
-                  onClick={() => setCurrent("partners")}
-                />
-                <NavItem
-                  label="결제수단 관리"
-                  active={current === "payments"}
-                  onClick={() => setCurrent("payments")}
-                />
-                <NavItem
-                  label="분류 관리"
-                  active={current === "categories"}
-                  onClick={() => setCurrent("categories")}
-                />
-                <NavItem
-                  label="택배 관리"
-                  active={current === "courier"}
-                  onClick={() => setCurrent("courier")}
+                  label="기초 관리 (통합)"
+                  active={current === "basics"}
+                  onClick={() => setCurrent("basics")}
                 />
               </div>
             </Collapse>

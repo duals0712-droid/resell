@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import Sidebar from "./components/Sidebar.jsx";
 import {
@@ -12,6 +13,7 @@ import PaymentsPage from "./pages/PaymentsPage.jsx";
 import PartnersPage from "./pages/PartnersPage.jsx";
 import CategoriesPage from "./pages/CategoriesPage.jsx";
 import CouriersPage from "./pages/CouriersPage.jsx";
+import BasicsUnifiedPage from "./pages/BasicsUnifiedPage.jsx"; // ✅ 통합 기초관리 페이지
 import ProductsPage from "./pages/ProductsPage.jsx";
 import InOutRegister from "./pages/InOutRegister.jsx";
 import OutLaterListPage from "./pages/OutLaterListPage.jsx";
@@ -22,6 +24,12 @@ import ReturnsExchangePage from "./pages/ReturnsExchangePage.jsx";
 import LedgerPage from "./pages/LedgerPage.jsx";
 import VatEstimatePage from "./pages/VatEstimatePage.jsx";
 import { supabase } from "./lib/supabase.js";
+// ✅ 서버 동기화 유틸 추가
+import {
+  initUserState,
+  queueSavePartial,
+  subscribeUserState,
+} from "./lib/remoteSync.js";
 
 /* ===========================
    승인지연 안내
@@ -95,7 +103,6 @@ function AuthPanel() {
   }, [usernameLogin, remember]);
 
   // 회원가입
-    // 회원가입
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [pw1, setPw1] = useState("");
@@ -549,6 +556,10 @@ export default function App() {
         const seqKey = "res_lot_seq_v1";
         const nextSeq = (Number(localStorage.getItem(seqKey)) || 0) + 1;
         localStorage.setItem(seqKey, String(nextSeq));
+        // ✅ lot_seq도 서버에 반영
+        if (session?.user?.id) {
+          queueSavePartial(session.user.id, { lot_seq: nextSeq });
+        }
         const lot = {
           id: uid(),
           productId: product.id,
@@ -592,6 +603,76 @@ export default function App() {
     () => computeAggregated(products, lots),
     [products, lots]
   );
+
+  /* ========= ✅ 서버 동기화: 초기 로드 ========= */
+  useEffect(() => {
+    (async () => {
+      if (!session?.user || !profileReady) return;
+      if (!profile?.approved && !profile?.is_admin) return;
+
+      const localSnapshot = {
+        products,
+        lots,
+        sales,
+        iorec: ioRec,
+        partners,
+        payments,
+        categories: categoriesState,
+        brands,
+        couriers,
+        lot_seq: Number(localStorage.getItem("res_lot_seq_v1") || 0),
+      };
+
+      const server = await initUserState(session.user.id, localSnapshot);
+
+      // 서버 상태를 기준으로 로컬 상태 덮어쓰기
+      setProducts(server.products || []);
+      setLots(server.lots || []);
+      setSales(server.sales || []);
+      setIoRec(server.iorec || []);
+      setPartners(server.partners || []);
+      setPayments(server.payments || []);
+      setCategoriesState(server.categories || []);
+      setBrands(server.brands || []);
+      setCouriers(server.couriers || []);
+      if (typeof server.lot_seq === "number") {
+        localStorage.setItem("res_lot_seq_v1", String(server.lot_seq));
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, profileReady, profile?.approved, profile?.is_admin]);
+
+  /* ========= ✅ 서버 동기화: 실시간 구독 ========= */
+  useEffect(() => {
+    if (!session?.user || (!profile?.approved && !profile?.is_admin)) return;
+    const off = subscribeUserState(session.user.id, (server) => {
+      setProducts(server.products || []);
+      setLots(server.lots || []);
+      setSales(server.sales || []);
+      setIoRec(server.iorec || []);
+      setPartners(server.partners || []);
+      setPayments(server.payments || []);
+      setCategoriesState(server.categories || []);
+      setBrands(server.brands || []);
+      setCouriers(server.couriers || []);
+      if (typeof server.lot_seq === "number") {
+        localStorage.setItem("res_lot_seq_v1", String(server.lot_seq));
+      }
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id, profile?.approved, profile?.is_admin]);
+
+  /* ========= ✅ 서버 동기화: 상태 변경 시 저장(디바운스) ========= */
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { partners }); }, [session?.user?.id, partners]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { payments }); }, [session?.user?.id, payments]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { categories: categoriesState }); }, [session?.user?.id, categoriesState]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { brands }); }, [session?.user?.id, brands]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { couriers }); }, [session?.user?.id, couriers]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { products }); }, [session?.user?.id, products]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { lots }); }, [session?.user?.id, lots]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { iorec: ioRec }); }, [session?.user?.id, ioRec]);
+  useEffect(() => { if (session?.user?.id) queueSavePartial(session.user.id, { sales }); }, [session?.user?.id, sales]);
 
   /* ---------- 렌더 ---------- */
   if (!authReady)
@@ -638,6 +719,23 @@ export default function App() {
         <Sidebar current={current} setCurrent={setCurrent} />
 
         <main className="p-6">
+          {/* ✅ 통합 기초 관리 */}
+          {current === "basics" && (
+            <BasicsUnifiedPage
+              partners={partners}
+              setPartners={setPartners}
+              payments={payments}
+              setPayments={setPayments}
+              categories={categoriesState}
+              setCategories={setCategoriesState}
+              brands={brands}
+              setBrands={setBrands}
+              couriers={couriers}
+              setCouriers={setCouriers}
+            />
+          )}
+
+          {/* 기존 개별 페이지 분기 (원하면 유지) */}
           {current === "partners" && (
             <div className="p-6 rounded-2xl bg-white/0">
               <PartnersPage partners={partners} setPartners={setPartners} />
@@ -663,6 +761,8 @@ export default function App() {
               <CouriersPage couriers={couriers} setCouriers={setCouriers} />
             </div>
           )}
+
+          {/* 상품/입출고/반품/내역 */}
           {current === "products" && (
             <ProductsPage
               products={products}
@@ -709,6 +809,8 @@ export default function App() {
               categories={categoriesState}
             />
           )}
+
+          {/* 장부/통계 */}
           {current === "ledger" && (
             <LedgerPage
               products={products}
@@ -738,6 +840,7 @@ export default function App() {
           )}
         </main>
 
+        {/* 재고 서랍 */}
         <InventoryDrawer
           open={drawerOpen}
           setOpen={setDrawerOpen}
